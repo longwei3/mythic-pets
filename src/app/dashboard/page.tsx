@@ -23,6 +23,7 @@ interface Pet {
   hp: number;
   maxHp: number;
   rarity: string;
+  generation?: number;
 }
 
 const elementColors: Record<Element, { bg: string; border: string; text: string; icon: string }> = {
@@ -170,6 +171,11 @@ export default function Dashboard() {
                 {/* Level & Rarity */}
                 <div className="text-center mb-4">
                   <span className="text-2xl font-bold text-white">Lv.{pet.level}</span>
+                  {pet.generation && (
+                    <span className="ml-2 px-2 py-1 bg-indigo-500/30 rounded text-sm text-indigo-300">
+                      第{pet.generation}代
+                    </span>
+                  )}
                   <span className="ml-2 px-2 py-1 bg-slate-700 rounded text-sm text-slate-300">
                     {t(`dashboard.rarity.${pet.rarity}`)}
                   </span>

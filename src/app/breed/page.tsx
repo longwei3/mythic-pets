@@ -18,6 +18,7 @@ interface Pet {
   gender: Gender;
   level: number;
   rarity: string;
+  generation?: number;
 }
 
 const elementColors: Record<Element, { bg: string; border: string; text: string; icon: string }> = {
@@ -41,14 +42,10 @@ export default function Breed() {
   const [breeding, setBreeding] = useState(false);
   const [breedStartTime, setBreedStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
-  const [result, setResult] = useState<{ name: string; element: Element; gender: Gender; rarity: string } | null>(null);
+  const [result, setResult] = useState<{ name: string; element: Element; gender: Gender; rarity: string; generation?: number } | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const myPets: Pet[] = [
-    { id: 1, name: '小红龙', element: 'fire', gender: 'male', level: 5, rarity: 'rare' },
-    { id: 2, name: '小蓝龙', element: 'water', gender: 'female', level: 3, rarity: 'epic' },
-    { id: 3, name: '小金龙', element: 'gold', gender: 'male', level: 1, rarity: 'common' },
-  ];
+  const myPets: Pet[] = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('myPets') || '[]') : [];
 
   // 计时器
   useEffect(() => {
@@ -80,15 +77,21 @@ export default function Breed() {
     const parent1 = myPets.find(p => p.id === selectedPets[0])!;
     const parent2 = myPets.find(p => p.id === selectedPets[1])!;
     
+    // 计算代数：取父母代数的最大值 + 1
+    const parent1Gen = parent1.generation || 1;
+    const parent2Gen = parent2.generation || 1;
+    const newGeneration = Math.max(parent1Gen, parent2Gen) + 1;
+    
     const inheritedElement = Math.random() > 0.5 ? parent1.element : parent2.element;
     const newElement = Math.random() > 0.3 ? inheritedElement : elements[Math.floor(Math.random() * elements.length)];
     
     const newPet = {
       element: newElement,
-      gender: genders[Math.floor(Math.random() * genders.length)],
+      gender: genders[Math.floor(Math.random() * genders.length)] as Gender,
       rarity: rarities[Math.floor(Math.random() * rarities.length)],
-      name: `小龙龙${Math.floor(Math.random() * 100)}`,
+      name: `小龙龙${Math.floor(Math.random() * 1000)}`,
       level: 1,
+      generation: newGeneration,
       exp: 0,
       maxExp: 100,
       attack: 15 + Math.floor(Math.random() * 10),
@@ -101,10 +104,11 @@ export default function Breed() {
       element: newPet.element,
       gender: newPet.gender,
       rarity: newPet.rarity,
-      name: newPet.name
+      name: newPet.name,
+      generation: newPet.generation
     });
     
-    // 保存到 localStorage
+    // 保存到 localStorage - 获取已有宠物并添加新宠物
     const existingPets = JSON.parse(localStorage.getItem('myPets') || '[]');
     const newPetWithId = { ...newPet, id: Date.now() };
     localStorage.setItem('myPets', JSON.stringify([...existingPets, newPetWithId]));
@@ -296,6 +300,11 @@ export default function Breed() {
               </div>
               <h3 className="text-3xl font-bold text-white mt-4">{result.name}</h3>
               
+              {/* 代数 */}
+              <p className="text-lg text-indigo-400 mt-1">
+                第 {result.generation || 1} 代
+              </p>
+              
               <div className="flex justify-center items-center gap-2 mt-2">
                 <span className="text-2xl">{elementColors[result.element].icon}</span>
                 <span className={`text-xl ${elementColors[result.element].text}`}>
@@ -317,6 +326,15 @@ export default function Breed() {
               <p className="text-slate-400 mt-2">
                 新宝宝已添加到你的收藏！
               </p>
+              
+              <div className="mt-6">
+                <Link
+                  href="/dashboard"
+                  className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-medium"
+                >
+                  查看我的宠物 🐠
+                </Link>
+              </div>
             </div>
           )}
         </div>
