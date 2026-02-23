@@ -10,6 +10,27 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter), var(--font-noto-sc), system-ui, sans-serif;
+  
+  /* Custom animations */
+  --animate-wiggle: wiggle 1s ease-in-out infinite;
+  --animate-bounce-slow: bounce 3s infinite;
+  --animate-glow: glow 2s ease-in-out infinite;
+  --animate-sparkle: sparkle 1.5s ease-in-out infinite;
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-5deg); }
+  50% { transform: rotate(5deg); }
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 5px currentColor; }
+  50% { box-shadow: 0 0 20px currentColor, 0 0 30px currentColor; }
+}
+
+@keyframes sparkle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.2); }
 }
 
 body {

@@ -14,7 +14,7 @@ type Gender = 'male' | 'female';
 interface Pet {
   id: number;
   name: string;
-  element: Element;
+  element: Element[];
   gender: Gender;
   level: number;
   rarity: string;
@@ -42,7 +42,7 @@ export default function Breed() {
   const [breeding, setBreeding] = useState(false);
   const [breedStartTime, setBreedStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
-  const [result, setResult] = useState<{ name: string; element: Element; gender: Gender; rarity: string; generation?: number } | null>(null);
+  const [result, setResult] = useState<{ name: string; element: Element[]; gender: Gender; rarity: string; generation?: number } | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const myPets: Pet[] = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('myPets') || '[]') : [];
@@ -70,7 +70,7 @@ export default function Breed() {
 
   const finishBreeding = () => {
     playBreedSound();
-    const elements: Element[] = ['gold', 'wood', 'water', 'fire', 'earth'];
+    const allElements: Element[] = ['gold', 'wood', 'water', 'fire', 'earth'];
     const genders: Gender[] = ['male', 'female'];
     const rarities = ['common', 'rare', 'epic', 'legendary'];
     
@@ -82,11 +82,35 @@ export default function Breed() {
     const parent2Gen = parent2.generation || 1;
     const newGeneration = Math.max(parent1Gen, parent2Gen) + 1;
     
-    const inheritedElement = Math.random() > 0.5 ? parent1.element : parent2.element;
-    const newElement = Math.random() > 0.3 ? inheritedElement : elements[Math.floor(Math.random() * elements.length)];
+    // 生成后代属性：1% 概率 5 属性，否则随机 1-4 个
+    let newElements: Element[];
+    const fiveElementChance = Math.random() < 0.01; // 1%
+    
+    if (fiveElementChance) {
+      // 1% 概率：5 个属性
+      newElements = [...allElements];
+    } else {
+      // 99% 概率：1-4 个属性
+      const numElements = Math.floor(Math.random() * 4) + 1;
+      // 从父母属性中继承
+      const parentElements = [...new Set([...parent1.element, ...parent2.element])];
+      newElements = [];
+      
+      // 70% 概率从父母继承，30% 概率随机新属性
+      for (let i = 0; i < numElements; i++) {
+        if (Math.random() < 0.7 && parentElements.length > 0) {
+          const idx = Math.floor(Math.random() * parentElements.length);
+          newElements.push(parentElements[idx]);
+        } else {
+          newElements.push(allElements[Math.floor(Math.random() * allElements.length)]);
+        }
+      }
+      // 去重
+      newElements = [...new Set(newElements)];
+    }
     
     const newPet = {
-      element: newElement,
+      element: newElements,
       gender: genders[Math.floor(Math.random() * genders.length)] as Gender,
       rarity: rarities[Math.floor(Math.random() * rarities.length)],
       name: `小龙龙${Math.floor(Math.random() * 1000)}`,
@@ -232,19 +256,19 @@ export default function Breed() {
                 className={`p-4 rounded-xl border-2 transition-all ${
                   selectedPets.includes(pet.id)
                     ? 'border-indigo-500 bg-indigo-500/20'
-                    : `border-slate-600 bg-slate-800 hover:border-slate-500 ${elementColors[pet.element].bg}`
+                    : `border-slate-600 bg-slate-800 hover:border-slate-500 ${elementColors[pet.element[0]].bg}`
                 } ${breeding ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <div className="flex justify-between items-start mb-2">
-                  <span className="text-xl">{elementColors[pet.element].icon}</span>
+                  <span className="text-xl">{elementColors[pet.element[0]].icon}</span>
                   <span className={`px-2 py-0.5 rounded text-xs ${pet.gender === 'male' ? 'bg-red-500/30 text-red-400' : 'bg-pink-500/30 text-pink-400'}`}>
                     {pet.gender === 'male' ? '♂' : '♀'}
                   </span>
                 </div>
                 <div className="text-4xl text-center mb-2">🦞</div>
                 <div className="text-white font-medium text-center">{pet.name}</div>
-                <div className={`text-center text-xs mt-1 ${elementColors[pet.element].text}`}>
-                  {pet.element.toUpperCase()}
+                <div className={`text-center text-xs mt-1 ${elementColors[pet.element[0]].text}`}>
+                  {pet.element.join('/').toUpperCase()}
                 </div>
               </button>
             ))}
@@ -298,9 +322,26 @@ export default function Breed() {
           {/* Breeding Result */}
           {result && !breeding && (
             <div className="mt-12 text-center animate-fade-in">
-              <div className={`inline-block text-9xl p-6 rounded-full ${elementColors[result.element].bg}`}>
-                🦞
+              {/* 5属性特效 */}
+              {result.element.length === 5 && (
+                <div className="mb-4">
+                  <span className="text-4xl animate-pulse">✨</span>
+                  <span className="text-4xl animate-pulse mx-2">🌟</span>
+                  <span className="text-4xl animate-pulse">✨</span>
+                </div>
+              )}
+              
+              <div className={`inline-block text-9xl p-8 rounded-full ${elementColors[result.element[0]].bg} animate-bounce hover:scale-110 transition-transform`}>
+                <span className="animate-wiggle inline-block">🦞</span>
               </div>
+              
+              {/* 5属性金色光环 */}
+              {result.element.length === 5 && (
+                <div className="absolute inset-0 pointer-events-none">
+                  <div className="absolute inset-0 rounded-full bg-gradient-to-r from-yellow-500/30 via-amber-500/20 to-yellow-500/30 animate-pulse" />
+                </div>
+              )}
+              
               <h3 className="text-3xl font-bold text-white mt-4">{result.name}</h3>
               
               {/* 代数 */}
@@ -308,14 +349,24 @@ export default function Breed() {
                 第 {result.generation || 1} 代
               </p>
               
+              {/* 多属性显示 */}
               <div className="flex justify-center items-center gap-2 mt-2">
-                <span className="text-2xl">{elementColors[result.element].icon}</span>
-                <span className={`text-xl ${elementColors[result.element].text}`}>
-                  {result.element.toUpperCase()}
-                </span>
+                {result.element.map((el, idx) => (
+                  <span key={idx} className="text-3xl animate-bounce" style={{ animationDelay: `${idx * 0.1}s` }} title={el}>
+                    {elementColors[el].icon}
+                  </span>
+                ))}
               </div>
+              <p className={`text-sm mt-1 ${elementColors[result.element[0]].text}`}>
+                {result.element.map(e => e.toUpperCase()).join('/')} ({result.element.length}属性)
+              </p>
               
-              <span className={`inline-block mt-2 px-3 py-1 rounded-full ${result.gender === 'male' ? 'bg-red-500/30 text-red-400' : 'bg-pink-500/30 text-pink-400'}`}>
+              {/* 5属性特效文字 */}
+              {result.element.length === 5 && (
+                <p className="text-amber-400 font-bold mt-3 text-xl animate-pulse">✨ 传说中的五行神龙！✨</p>
+              )}
+              
+              <span className={`inline-block mt-3 px-4 py-2 rounded-full text-lg ${result.gender === 'male' ? 'bg-red-500/30 text-red-400' : 'bg-pink-500/30 text-pink-400'}`}>
                 {result.gender === 'male' ? '♂ 公' : '♀ 母'}
               </span>
 

@@ -13,7 +13,7 @@ type Gender = 'male' | 'female';
 interface Pet {
   id: number;
   name: string;
-  element: Element;
+  element: Element[];  // 支持多个属性
   gender: Gender;
   level: number;
   exp: number;
@@ -60,12 +60,12 @@ export default function Dashboard() {
           return;
         }
         
-        // 创世宠物：一公一母
+        // 创世宠物：3个属性，一公一母
         const starterPets = [
           {
             id: 1,
             name: '小火龙',
-            element: 'fire' as Element,
+            element: ['fire', 'water', 'earth'] as Element[],  // 3属性
             gender: 'male' as Gender,
             level: 1,
             exp: 0,
@@ -80,7 +80,7 @@ export default function Dashboard() {
           {
             id: 2,
             name: '小水龙',
-            element: 'water' as Element,
+            element: ['water', 'fire', 'wood'] as Element[],  // 3属性
             gender: 'female' as Gender,
             level: 1,
             exp: 0,
@@ -160,16 +160,20 @@ export default function Dashboard() {
             {pets.map((pet) => (
               <div
                 key={pet.id}
-                className={`bg-slate-800 rounded-2xl p-6 border-2 ${elementColors[pet.element].border}`}
+                className={`bg-slate-800 rounded-2xl p-6 border-2 ${elementColors[pet.element[0]].border}`}
               >
                 {/* Header */}
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex items-center gap-2">
-                    <span className="text-4xl">{elementColors[pet.element].icon}</span>
+                    <div className="flex gap-1">
+                      {pet.element.map((el, idx) => (
+                        <span key={idx} className="text-xl" title={el}>{elementColors[el].icon}</span>
+                      ))}
+                    </div>
                     <div>
                       <h3 className="text-xl font-bold text-white">{pet.name}</h3>
-                      <span className={`text-sm ${elementColors[pet.element].text}`}>
-                        {pet.element.toUpperCase()}
+                      <span className={`text-sm ${elementColors[pet.element[0]].text}`}>
+                        {pet.element.map(e => e.toUpperCase()).join('/')}
                       </span>
                     </div>
                   </div>
@@ -178,11 +182,19 @@ export default function Dashboard() {
                   </span>
                 </div>
 
-                {/* Image */}
+                {/* Image with cute animations */}
                 <div className="text-center mb-4">
-                  <div className={`inline-block text-8xl p-4 rounded-full ${genderColors[pet.gender].bg}`}>
-                    🦞
+                  <div className={`inline-block text-8xl p-4 rounded-full ${genderColors[pet.gender].bg} hover:scale-110 transition-transform cursor-pointer animate-bounce-slow`}>
+                    <span className="animate-wiggle inline-block">🦞</span>
                   </div>
+                  {/* Sparkle effects for rare+ */}
+                  {pet.rarity !== 'common' && (
+                    <div className="flex justify-center gap-1 mt-2">
+                      {[...Array(Math.min(pet.rarity === 'legendary' ? 5 : pet.rarity === 'epic' ? 3 : 2, 5))].map((_, i) => (
+                        <span key={i} className="text-amber-400 animate-pulse" style={{ animationDelay: `${i * 0.2}s` }}>✨</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Level & Rarity */}
