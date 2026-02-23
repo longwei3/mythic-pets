@@ -10,23 +10,23 @@ export default {
 
   // Landing Page
   landing: {
-    title: '神话宠物',
-    subtitle: '收集、对战与繁殖传说宠物',
-    description: '你的冒险从这里开始。收集神话生物，与对手战斗，在 Base 链上繁殖独特的 NFT。',
+    title: '萌龙牧场',
+    subtitle: '收集、对战与繁殖小萌龙',
+    description: '你的冒险从这里开始。收集萌萌的小龙龙，与对手战斗，在 Base 链上繁殖独特的 NFT 龙龙。',
     connectWallet: '连接钱包',
     getStarted: '开始游戏',
     features: {
       collect: {
-        title: '收集宠物',
-        description: '免费领取宠物，开始你的收集之旅'
+        title: '收集小龙龙',
+        description: '免费领取小龙龙，开始你的收集之旅'
       },
       battle: {
         title: '战斗',
-        description: '与 AI 对战，提升宠物等级'
+        description: '与 AI 对战，提升小龙龙等级'
       },
       breed: {
         title: '繁殖',
-        description: '通过繁殖创造独特 NFT'
+        description: '通过繁殖创造独特 NFT 龙龙'
       }
     }
   },

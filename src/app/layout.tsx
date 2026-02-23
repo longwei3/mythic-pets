@@ -14,8 +14,8 @@ const notoSansSC = Noto_Sans_SC({
 });
 
 export const metadata: Metadata = {
-  title: "MythicPets - 神话宠物链游",
-  description: "收集、对战与繁殖传说宠物。在 Base 链上体验 Web3 宠物养成游戏。",
+  title: "Lobster Ranch - 萌龙牧场 Web3 Game",
+  description: "收集、对战与繁殖萌萌的小龙龙。在 Base 链上体验 Web3 宠物养成游戏。",
   icons: {
     icon: "/favicon.ico",
   },

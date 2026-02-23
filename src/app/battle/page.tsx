@@ -22,22 +22,22 @@ export default function Battle() {
   const { isConnected } = useAccount();
   const [battleState, setBattleState] = useState<'idle' | 'fighting' | 'victory' | 'defeat'>('idle');
   const [playerPet, setPlayerPet] = useState<Pet>({
-    name: '小青龙',
+    name: '小红龙',
     level: 5,
     hp: 100,
     maxHp: 100,
     attack: 45,
     defense: 30,
-    image: '🐉'
+    image: '🦞'
   });
   const [enemyPet, setEnemyPet] = useState<Pet>({
-    name: '暗影狼',
+    name: '麻辣小龙虾',
     level: 4,
     hp: 80,
     maxHp: 80,
     attack: 35,
     defense: 20,
-    image: '🐺'
+    image: '🦞'
   });
   const [logs, setLogs] = useState<string[]>([]);
 
@@ -62,7 +62,7 @@ export default function Battle() {
         const enemyDamage = Math.floor(enemyPet.attack - playerPet.defense * 0.5);
         const newPlayerHp = Math.max(0, playerPet.hp - enemyDamage);
         setPlayerPet({ ...playerPet, hp: newPlayerHp });
-        setLogs(prev => [...prev, `暗影狼反击，造成 ${enemyDamage} 伤害！`]);
+        setLogs(prev => [...prev, `麻辣小龙虾反击，造成 ${enemyDamage} 伤害！`]);
         
         if (newPlayerHp <= 0) {
           setBattleState('defeat');
@@ -96,7 +96,7 @@ export default function Battle() {
       <header className="flex items-center justify-between px-6 py-4 bg-slate-800/50 backdrop-blur-sm">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">🦄</span>
+            <span className="text-2xl">🦞</span>
             <span className="text-xl font-bold text-white">MythicPets</span>
           </Link>
           <nav className="flex gap-4 ml-8">

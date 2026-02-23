@@ -10,19 +10,19 @@ export default {
 
   // Landing Page
   landing: {
-    title: 'MythicPets',
-    subtitle: 'Collect, Battle & Breed Legendary Pets',
-    description: 'Your adventure begins here. Collect mythical creatures, battle opponents, and breed unique NFTs on Base.',
+    title: 'Lobster Ranch',
+    subtitle: 'Collect, Battle & Breed Cute Lobsters',
+    description: 'Your adventure begins here. Collect cute lobsters, battle opponents, and breed unique NFTs on Base.',
     connectWallet: 'Connect Wallet',
     getStarted: 'Get Started',
     features: {
       collect: {
-        title: 'Collect Pets',
-        description: 'Start with a free pet and build your collection'
+        title: 'Collect Lobsters',
+        description: 'Start with a free lobster and build your collection'
       },
       battle: {
         title: 'Battle',
-        description: 'Fight AI opponents and level up your pets'
+        description: 'Fight AI opponents and level up your lobsters'
       },
       breed: {
         title: 'Breed',

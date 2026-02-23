@@ -18,7 +18,7 @@ export default function Dashboard() {
       setPets([
         {
           id: 1,
-          name: '小青龙',
+          name: '小红龙',
           level: 5,
           exp: 1200,
           maxExp: 2000,
@@ -27,7 +27,7 @@ export default function Dashboard() {
           hp: 100,
           maxHp: 100,
           rarity: 'rare',
-          image: '🐉'
+          image: '🦞'
         }
       ]);
     }
@@ -61,7 +61,7 @@ export default function Dashboard() {
       <header className="flex items-center justify-between px-6 py-4 bg-slate-800/50 backdrop-blur-sm">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">🦄</span>
+            <span className="text-2xl">🦞</span>
             <span className="text-xl font-bold text-white">MythicPets</span>
           </Link>
           <nav className="flex gap-4 ml-8">

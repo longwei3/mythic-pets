@@ -15,9 +15,9 @@ export default function Breed() {
   const [result, setResult] = useState<{ name: string; rarity: string; image: string } | null>(null);
 
   const myPets = [
-    { id: 1, name: '小青龙', rarity: 'rare', image: '🐉', level: 5 },
-    { id: 2, name: '小火凤', rarity: 'epic', image: '🐦', level: 3 },
-    { id: 3, name: '小白虎', rarity: 'common', image: '🐯', level: 1 },
+    { id: 1, name: '小红龙', rarity: 'rare', image: '🦞', level: 5 },
+    { id: 2, name: '小蓝龙', rarity: 'epic', image: '🦞', level: 3 },
+    { id: 3, name: '小绿龙', rarity: 'common', image: '🦞', level: 1 },
   ];
 
   const togglePet = (id: number) => {
@@ -38,8 +38,8 @@ export default function Breed() {
     setTimeout(() => {
       const rarities = ['common', 'rare', 'epic', 'legendary'];
       const randomRarity = rarities[Math.floor(Math.random() * rarities.length)];
-      const images = ['🐲', '🦁', '🦊', '🐻', '🦄'];
-      const names = ['神兽', '灵兽', '仙兽', '圣兽'];
+      const images: string[] = ['🦞', '🦞', '🦞', '🦞', '🦞'];
+      const names = ['小龙龙', '小虾虾', '小蟹蟹', '小钳钳'];
       
       setResult({
         name: names[Math.floor(Math.random() * names.length)],
@@ -67,7 +67,7 @@ export default function Breed() {
       <header className="flex items-center justify-between px-6 py-4 bg-slate-800/50 backdrop-blur-sm">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">🦄</span>
+            <span className="text-2xl">🦞</span>
             <span className="text-xl font-bold text-white">MythicPets</span>
           </Link>
           <nav className="flex gap-4 ml-8">
