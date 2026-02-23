@@ -50,6 +50,17 @@ export default {
       epic: 'Epic',
       legendary: 'Legendary',
       mythic: 'Mythic'
+    },
+    element: {
+      gold: 'Gold',
+      wood: 'Wood',
+      water: 'Water',
+      fire: 'Fire',
+      earth: 'Earth'
+    },
+    gender: {
+      male: 'Male',
+      female: 'Female'
     }
   },
 

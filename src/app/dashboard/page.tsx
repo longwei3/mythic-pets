@@ -3,22 +3,54 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount, useContractRead, useContractWrite } from 'wagmi';
+import { useAccount } from 'wagmi';
 import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 
+type Element = 'gold' | 'wood' | 'water' | 'fire' | 'earth';
+type Gender = 'male' | 'female';
+
+interface Pet {
+  id: number;
+  name: string;
+  element: Element;
+  gender: Gender;
+  level: number;
+  exp: number;
+  maxExp: number;
+  attack: number;
+  defense: number;
+  hp: number;
+  maxHp: number;
+  rarity: string;
+}
+
+const elementColors: Record<Element, { bg: string; border: string; text: string; icon: string }> = {
+  gold: { bg: 'bg-yellow-500/20', border: 'border-yellow-500', text: 'text-yellow-400', icon: '🪙' },
+  wood: { bg: 'bg-green-500/20', border: 'border-green-500', text: 'text-green-400', icon: '🪵' },
+  water: { bg: 'bg-blue-500/20', border: 'border-blue-500', text: 'text-blue-400', icon: '💧' },
+  fire: { bg: 'bg-red-500/20', border: 'border-red-500', text: 'text-red-400', icon: '🔥' },
+  earth: { bg: 'bg-amber-700/20', border: 'border-amber-600', text: 'text-amber-500', icon: '🪨' },
+};
+
+const genderColors: Record<Gender, { color: string; bg: string }> = {
+  male: { color: 'text-red-400', bg: 'bg-red-500/30' },
+  female: { color: 'text-pink-400', bg: 'bg-pink-500/30' },
+};
+
 export default function Dashboard() {
   const { t } = useTranslation();
-  const { isConnected, address } = useAccount();
-  const [pets, setPets] = useState<any[]>([]);
+  const { isConnected } = useAccount();
+  const [pets, setPets] = useState<Pet[]>([]);
 
-  // Mock data - will replace with contract calls
   useEffect(() => {
     if (isConnected) {
       setPets([
         {
           id: 1,
           name: '小红龙',
+          element: 'fire',
+          gender: 'male',
           level: 5,
           exp: 1200,
           maxExp: 2000,
@@ -26,23 +58,11 @@ export default function Dashboard() {
           defense: 30,
           hp: 100,
           maxHp: 100,
-          rarity: 'rare',
-          image: '🦞'
+          rarity: 'rare'
         }
       ]);
     }
   }, [isConnected]);
-
-  const getRarityColor = (rarity: string) => {
-    switch (rarity) {
-      case 'common': return 'text-slate-400 border-slate-500';
-      case 'rare': return 'text-blue-400 border-blue-500';
-      case 'epic': return 'text-purple-400 border-purple-500';
-      case 'legendary': return 'text-amber-400 border-amber-500';
-      case 'mythic': return 'text-red-400 border-red-500';
-      default: return 'text-slate-400 border-slate-500';
-    }
-  };
 
   if (!isConnected) {
     return (
@@ -62,17 +82,17 @@ export default function Dashboard() {
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center gap-2">
             <span className="text-2xl">🦞</span>
-            <span className="text-xl font-bold text-white">MythicPets</span>
+            <span className="text-xl font-bold text-white">Lobster Ranch</span>
           </Link>
           <nav className="flex gap-4 ml-8">
             <Link href="/dashboard" className="text-indigo-400 hover:text-indigo-300">
-              {t('dashboard')}
+              {t('nav.dashboard')}
             </Link>
             <Link href="/battle" className="text-slate-400 hover:text-white">
-              {t('battle')}
+              {t('nav.battle')}
             </Link>
             <Link href="/breed" className="text-slate-400 hover:text-white">
-              {t('breed')}
+              {t('nav.breed')}
             </Link>
           </nav>
         </div>
@@ -84,14 +104,14 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-white mb-8">{t('dashboard.title')}</h1>
+        <h1 className="text-3xl font-bold text-white mb-8">🐠 我的龙虾收藏</h1>
 
         {pets.length === 0 ? (
           <div className="text-center py-16">
-            <div className="text-6xl mb-4">🥚</div>
-            <p className="text-xl text-slate-400 mb-8">{t('dashboard.noPets')}</p>
-            <button className="px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full text-xl font-semibold hover:from-indigo-500 hover:to-purple-500 transition-all">
-              {t('dashboard.claimFree')}
+            <div className="text-8xl mb-4">🦞</div>
+            <p className="text-xl text-slate-400 mb-8">还没有龙虾，快去领取吧！</p>
+            <button className="px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full text-xl font-semibold">
+              🆓 免费领取龙虾
             </button>
           </div>
         ) : (
@@ -99,32 +119,50 @@ export default function Dashboard() {
             {pets.map((pet) => (
               <div
                 key={pet.id}
-                className={`bg-slate-800 rounded-2xl p-6 border-2 ${getRarityColor(pet.rarity)}`}
+                className={`bg-slate-800 rounded-2xl p-6 border-2 ${elementColors[pet.element].border}`}
               >
-                <div className="text-8xl text-center mb-4">{pet.image}</div>
-                <h3 className="text-2xl font-bold text-center mb-2">{pet.name}</h3>
+                {/* Header */}
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-4xl">{elementColors[pet.element].icon}</span>
+                    <div>
+                      <h3 className="text-xl font-bold text-white">{pet.name}</h3>
+                      <span className={`text-sm ${elementColors[pet.element].text}`}>
+                        {pet.element.toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+                  <span className={`px-2 py-1 rounded-full text-xs ${genderColors[pet.gender].bg} ${genderColors[pet.gender].color}`}>
+                    {pet.gender === 'male' ? '♂ 公' : '♀ 母'}
+                  </span>
+                </div>
+
+                {/* Image */}
                 <div className="text-center mb-4">
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium bg-slate-700`}>
+                  <div className={`inline-block text-8xl p-4 rounded-full ${genderColors[pet.gender].bg}`}>
+                    🦞
+                  </div>
+                </div>
+
+                {/* Level & Rarity */}
+                <div className="text-center mb-4">
+                  <span className="text-2xl font-bold text-white">Lv.{pet.level}</span>
+                  <span className="ml-2 px-2 py-1 bg-slate-700 rounded text-sm text-slate-300">
                     {t(`dashboard.rarity.${pet.rarity}`)}
                   </span>
                 </div>
 
                 {/* Stats */}
                 <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">{t('dashboard.pet.level')}</span>
-                    <span className="text-white font-bold">{pet.level}</span>
-                  </div>
-                  
                   {/* EXP Bar */}
                   <div>
                     <div className="flex justify-between text-sm mb-1">
-                      <span className="text-slate-400">{t('dashboard.pet.exp')}</span>
+                      <span className="text-slate-400">经验</span>
                       <span className="text-indigo-400">{pet.exp}/{pet.maxExp}</span>
                     </div>
                     <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all"
+                        className="h-full bg-gradient-to-r from-indigo-500 to-purple-500"
                         style={{ width: `${(pet.exp / pet.maxExp) * 100}%` }}
                       />
                     </div>
@@ -133,23 +171,23 @@ export default function Dashboard() {
                   {/* HP Bar */}
                   <div>
                     <div className="flex justify-between text-sm mb-1">
-                      <span className="text-slate-400">{t('dashboard.pet.hp')}</span>
+                      <span className="text-slate-400">生命</span>
                       <span className="text-green-400">{pet.hp}/{pet.maxHp}</span>
                     </div>
                     <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-green-500 transition-all"
+                        className="h-full bg-green-500"
                         style={{ width: `${(pet.hp / pet.maxHp) * 100}%` }}
                       />
                     </div>
                   </div>
 
-                  <div className="flex justify-between pt-2">
-                    <span className="text-slate-400">{t('dashboard.pet.attack')}</span>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">攻击</span>
                     <span className="text-red-400 font-bold">{pet.attack}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-400">{t('dashboard.pet.defense')}</span>
+                    <span className="text-slate-400">防御</span>
                     <span className="text-blue-400 font-bold">{pet.defense}</span>
                   </div>
                 </div>
@@ -158,15 +196,15 @@ export default function Dashboard() {
                 <div className="flex gap-2 mt-6">
                   <Link
                     href="/battle"
-                    className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-center font-medium transition-colors"
+                    className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-center font-medium"
                   >
-                    ⚔️ {t('battle')}
+                    ⚔️ 战斗
                   </Link>
                   <Link
                     href="/breed"
-                    className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-center font-medium transition-colors"
+                    className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-center font-medium"
                   >
-                    🐣 {t('breed')}
+                    🐣 繁殖
                   </Link>
                 </div>
               </div>

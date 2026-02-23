@@ -7,8 +7,13 @@ import { useAccount } from 'wagmi';
 import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 
+type Element = 'gold' | 'wood' | 'water' | 'fire' | 'earth';
+type Gender = 'male' | 'female';
+
 interface Pet {
   name: string;
+  element: Element;
+  gender: Gender;
   level: number;
   hp: number;
   maxHp: number;
@@ -17,12 +22,20 @@ interface Pet {
   image: string;
 }
 
+const elementColors: Record<Element, { bg: string; border: string; text: string; icon: string }> = {
+  gold: { bg: 'bg-yellow-500/20', border: 'border-yellow-500', text: 'text-yellow-400', icon: '🪙' },
+  wood: { bg: 'bg-green-500/20', border: 'border-green-500', text: 'text-green-400', icon: '🪵' },
+  water: { bg: 'bg-blue-500/20', border: 'border-blue-500', text: 'text-blue-400', icon: '💧' },
+  fire: { bg: 'bg-red-500/20', border: 'border-red-500', text: 'text-red-400', icon: '🔥' },
+  earth: { bg: 'bg-amber-700/20', border: 'border-amber-600', text: 'text-amber-500', icon: '🪨' },
+};
+
 const oceanEnemies = [
-  { name: '小丑鱼', level: 3, hp: 60, maxHp: 60, attack: 25, defense: 15, image: '🐠' },
-  { name: '章鱼哥', level: 4, hp: 80, maxHp: 80, attack: 35, defense: 20, image: '🐙' },
-  { name: '螃蟹战士', level: 5, hp: 100, maxHp: 100, attack: 40, defense: 30, image: '🦀' },
-  { name: '鲨鱼博士', level: 6, hp: 120, maxHp: 120, attack: 50, defense: 25, image: '🦈' },
-  { name: '鲸鱼老师', level: 7, hp: 150, maxHp: 150, attack: 45, defense: 35, image: '🐋' },
+  { name: '小丑鱼', element: 'water' as Element, gender: 'male' as Gender, level: 3, hp: 60, maxHp: 60, attack: 25, defense: 15, image: '🐠' },
+  { name: '章鱼哥', element: 'water' as Element, gender: 'male' as Gender, level: 4, hp: 80, maxHp: 80, attack: 35, defense: 20, image: '🐙' },
+  { name: '螃蟹战士', element: 'earth' as Element, gender: 'male' as Gender, level: 5, hp: 100, maxHp: 100, attack: 40, defense: 30, image: '🦀' },
+  { name: '鲨鱼博士', element: 'water' as Element, gender: 'male' as Gender, level: 6, hp: 120, maxHp: 120, attack: 50, defense: 25, image: '🦈' },
+  { name: '鲸鱼老师', element: 'water' as Element, gender: 'female' as Gender, level: 7, hp: 150, maxHp: 150, attack: 45, defense: 35, image: '🐋' },
 ];
 
 export default function Battle() {
@@ -31,6 +44,8 @@ export default function Battle() {
   const [battleState, setBattleState] = useState<'idle' | 'fighting' | 'victory' | 'defeat'>('idle');
   const [playerPet, setPlayerPet] = useState<Pet>({
     name: '小红龙',
+    element: 'fire',
+    gender: 'male',
     level: 5,
     hp: 100,
     maxHp: 100,
@@ -163,9 +178,15 @@ export default function Battle() {
         <div className="flex justify-around items-center mb-12">
           {/* Player Pet */}
           <div className={`text-center transition-transform ${shake ? 'translate-x-2' : ''}`}>
+            <div className="flex justify-center mb-2">
+              <span className="text-2xl mr-2">{elementColors[playerPet.element].icon}</span>
+              <span className={`px-2 py-0.5 rounded text-xs ${playerPet.gender === 'male' ? 'bg-red-500/30 text-red-400' : 'bg-pink-500/30 text-pink-400'}`}>
+                {playerPet.gender === 'male' ? '♂' : '♀'}
+              </span>
+            </div>
             <div className="text-8xl mb-4 animate-pulse">{playerPet.image}</div>
             <h3 className="text-xl font-bold text-white mb-2">{playerPet.name}</h3>
-            <p className="text-slate-400 mb-2">Lv.{playerPet.level}</p>
+            <p className="text-slate-400 mb-2">Lv.{playerPet.level} • {playerPet.element.toUpperCase()}</p>
             <div className="w-48 h-4 bg-slate-700 rounded-full overflow-hidden">
               <div 
                 className="h-full bg-green-500 transition-all"
@@ -179,9 +200,15 @@ export default function Battle() {
 
           {/* Enemy Pet */}
           <div className={`text-center transition-transform ${shake ? '-translate-x-2' : ''}`}>
+            <div className="flex justify-center mb-2">
+              <span className="text-2xl mr-2">{elementColors[enemyPet.element].icon}</span>
+              <span className={`px-2 py-0.5 rounded text-xs ${enemyPet.gender === 'male' ? 'bg-red-500/30 text-red-400' : 'bg-pink-500/30 text-pink-400'}`}>
+                {enemyPet.gender === 'male' ? '♂' : '♀'}
+              </span>
+            </div>
             <div className={`text-8xl mb-4 ${attackEffect !== 'none' ? 'animate-spin' : ''}`}>{enemyPet.image}</div>
             <h3 className="text-xl font-bold text-white mb-2">{enemyPet.name}</h3>
-            <p className="text-slate-400 mb-2">Lv.{enemyPet.level}</p>
+            <p className="text-slate-400 mb-2">Lv.{enemyPet.level} • {enemyPet.element.toUpperCase()}</p>
             <div className="w-48 h-4 bg-slate-700 rounded-full overflow-hidden">
               <div 
                 className="h-full bg-red-500 transition-all"

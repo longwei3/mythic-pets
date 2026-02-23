@@ -50,6 +50,17 @@ export default {
       epic: '史诗',
       legendary: '传说',
       mythic: '神话'
+    },
+    element: {
+      gold: '金',
+      wood: '木',
+      water: '水',
+      fire: '火',
+      earth: '土'
+    },
+    gender: {
+      male: '公',
+      female: '母'
     }
   },
 
