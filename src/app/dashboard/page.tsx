@@ -48,17 +48,31 @@ export default function Dashboard() {
       setPets([
         {
           id: 1,
-          name: '小红龙',
+          name: '小火龙',
           element: 'fire',
           gender: 'male',
-          level: 5,
-          exp: 1200,
-          maxExp: 2000,
-          attack: 45,
-          defense: 30,
-          hp: 100,
-          maxHp: 100,
-          rarity: 'rare'
+          level: 1,
+          exp: 0,
+          maxExp: 100,
+          attack: 20,
+          defense: 10,
+          hp: 50,
+          maxHp: 50,
+          rarity: 'common'
+        },
+        {
+          id: 2,
+          name: '小水龙',
+          element: 'water',
+          gender: 'female',
+          level: 1,
+          exp: 0,
+          maxExp: 100,
+          attack: 18,
+          defense: 12,
+          hp: 55,
+          maxHp: 55,
+          rarity: 'common'
         }
       ]);
     }
