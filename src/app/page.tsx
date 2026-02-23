@@ -26,6 +26,20 @@ export default function Home() {
             MythicPets
           </h1>
         </div>
+        <nav className="flex gap-4">
+          <Link href="/dashboard" className="text-slate-400 hover:text-white">
+            {t('nav.dashboard')}
+          </Link>
+          <Link href="/battle" className="text-slate-400 hover:text-white">
+            {t('nav.battle')}
+          </Link>
+          <Link href="/breed" className="text-slate-400 hover:text-white">
+            {t('nav.breed')}
+          </Link>
+          <Link href="/market" className="text-slate-400 hover:text-white">
+            🏪 市场
+          </Link>
+        </nav>
         <div className="flex items-center gap-4">
           <LanguageSwitcher />
           {mounted && <ConnectButton />}

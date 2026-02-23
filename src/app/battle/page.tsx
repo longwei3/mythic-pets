@@ -147,6 +147,9 @@ export default function Battle() {
             <Link href="/breed" className="text-slate-400 hover:text-white">
               {t('nav.breed')}
             </Link>
+            <Link href="/market" className="text-slate-400 hover:text-white">
+              🏪 市场
+            </Link>
           </nav>
         </div>
         <div className="flex items-center gap-4">

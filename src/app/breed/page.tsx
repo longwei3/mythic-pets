@@ -194,6 +194,9 @@ export default function Breed() {
             <Link href="/breed" className="text-indigo-400 hover:text-indigo-300">
               {t('nav.breed')}
             </Link>
+            <Link href="/market" className="text-slate-400 hover:text-white">
+              🏪 市场
+            </Link>
           </nav>
         </div>
         <div className="flex items-center gap-4">

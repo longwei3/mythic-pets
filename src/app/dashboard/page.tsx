@@ -48,9 +48,18 @@ export default function Dashboard() {
     if (isConnected) {
       // 先检查 localStorage
       const savedPets = localStorage.getItem('myPets');
+      const generation1Count = parseInt(localStorage.getItem('generation1Count') || '0');
+      
       if (savedPets) {
         setPets(JSON.parse(savedPets));
       } else {
+        // 创世宠物限制 200 只
+        // 检查是否已经领过
+        if (generation1Count >= 200) {
+          alert('创世宠物已领完！感谢参与，公测时优先考虑。');
+          return;
+        }
+        
         // 创世宠物：一公一母
         const starterPets = [
           {
@@ -65,7 +74,8 @@ export default function Dashboard() {
             defense: 10,
             hp: 50,
             maxHp: 50,
-            rarity: 'common'
+            rarity: 'common',
+            generation: 1
           },
           {
             id: 2,
@@ -79,11 +89,15 @@ export default function Dashboard() {
             defense: 12,
             hp: 55,
             maxHp: 55,
-            rarity: 'common'
+            rarity: 'common',
+            generation: 1
           }
         ];
         setPets(starterPets);
         localStorage.setItem('myPets', JSON.stringify(starterPets));
+        
+        // 更新创世宠物计数
+        localStorage.setItem('generation1Count', String(generation1Count + 1));
       }
     }
   }, [isConnected]);
@@ -117,6 +131,9 @@ export default function Dashboard() {
             </Link>
             <Link href="/breed" className="text-slate-400 hover:text-white">
               {t('nav.breed')}
+            </Link>
+            <Link href="/market" className="text-slate-400 hover:text-white">
+              🏪 市场
             </Link>
           </nav>
         </div>
