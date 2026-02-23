@@ -1,70 +1,97 @@
 export default {
-  // Navigation
+  common: {
+    appName: 'Lobster Ranch',
+    loading: 'Loading...',
+    error: 'Error',
+    success: 'Success',
+    confirm: 'Confirm',
+    cancel: 'Cancel',
+    close: 'Close',
+    backHome: 'Back Home',
+  },
+
   nav: {
     home: 'Home',
-    dashboard: 'Dashboard',
+    dashboard: 'My Pets',
     battle: 'Battle',
     breed: 'Breed',
+    gather: 'Gather',
     market: 'Market',
   },
 
-  // Landing Page
   landing: {
     title: 'Lobster Ranch',
     subtitle: 'Collect, Battle & Breed Cute Lobsters',
-    description: 'Your adventure begins here. Collect cute lobsters, battle opponents, and breed unique NFTs on Base.',
+    description:
+      'Your adventure begins here. Collect cute lobsters, battle opponents, and breed unique NFTs on Base.',
     connectWallet: 'Connect Wallet',
     getStarted: 'Get Started',
     features: {
       collect: {
         title: 'Collect Lobsters',
-        description: 'Start with a free lobster and build your collection'
+        description: 'Start with free lobsters and build your collection',
       },
       battle: {
         title: 'Battle',
-        description: 'Fight AI opponents and level up your lobsters'
+        description: 'Fight AI opponents and level up your lobsters',
       },
       breed: {
         title: 'Breed',
-        description: 'Create unique NFTs through breeding'
-      }
-    }
+        description: 'Create unique NFT lobsters through breeding',
+      },
+    },
+    stats: {
+      wallets: 'Wallets',
+      pets: 'Pets NFT',
+      battles: 'Battles',
+    },
+    footer: 'Built on Base • Powered by AI',
   },
 
-  // Dashboard
   dashboard: {
     title: 'My Pets',
-    noPets: 'No pets yet. Get your first pet!',
-    claimFree: 'Claim Free Pet',
+    noPets: 'No lobsters yet. Claim your first one!',
+    claimFree: 'Claim Free Lobster',
+    starterSoldOut: 'Genesis lobsters are sold out. Thanks for joining!',
+    starterPets: {
+      fire: 'Fire Lob',
+      water: 'Water Lob',
+    },
     pet: {
       level: 'Level',
       exp: 'EXP',
       attack: 'Attack',
       defense: 'Defense',
       hp: 'HP',
-      rarity: 'Rarity'
+      mp: 'MP',
+      rarity: 'Rarity',
     },
     rarity: {
       common: 'Common',
       rare: 'Rare',
       epic: 'Epic',
       legendary: 'Legendary',
-      mythic: 'Mythic'
     },
     element: {
       gold: 'Gold',
       wood: 'Wood',
       water: 'Water',
       fire: 'Fire',
-      earth: 'Earth'
+      earth: 'Earth',
     },
     gender: {
       male: 'Male',
-      female: 'Female'
-    }
+      female: 'Female',
+    },
+    myPets: 'My Collection',
+    attack: 'Attack',
+    defense: 'Defense',
+    magicPotions: 'Magic Potions: {{count}}',
+    goGather: 'Go Gather',
+    usePotion: 'Use Potion (Fill MP)',
+    magicFull: 'Magic Full',
   },
 
-  // Battle
   battle: {
     title: 'Battle Arena',
     startBattle: 'Start Battle',
@@ -75,16 +102,118 @@ export default {
     victory: 'Victory!',
     defeat: 'Defeat!',
     expGained: '+{{exp}} EXP',
-    reward: 'Reward: +{{amount}} $MYTH'
+    reward: 'Reward: +{{amount}} $MYTH',
+    battleStart: '⚔️ Battle Start!',
+    youUsed: 'You used {{skill}}, dealing {{damage}} damage!',
+    enemyAttacks: '{{name}} attacks, dealing {{damage}} damage!',
+    enemyDefeated: '🎉 Victory! {{name}} defeated!',
+    victoryText: '🏆 +100 EXP, +10 $MYTH',
+    defeatText: '💀 Defeat! Your lobster fainted...',
+    tryAgain: 'Try Again!',
+    reconnect: 'Please connect wallet',
+    battleLog: 'Battle Log',
+    arena: 'Battle Arena',
+    playerDefaultName: 'Red Lob',
+    enemies: {
+      clownfish: 'Clownfish',
+      octopus: 'Octopus Bro',
+      crab: 'Crab Warrior',
+      shark: 'Shark Doctor',
+      whale: 'Whale Mentor',
+    },
+    vs: 'VS',
+    hp: 'HP',
+    mp: 'MP',
+    rematch: 'Fight Again',
+    challengeAgain: 'Challenge Again',
+    victoryReward: '+100 EXP, +10 $MYTH',
+    cooldownApplied: 'Defeat cooldown: 10 minutes',
+    cooldownNotice: 'Cooldown active. You can battle again in {{time}}.',
+    cooldownButton: 'Cooldown {{time}}',
+    noMana: 'Not enough MP. Need {{cost}} MP for special skill.',
+    needMana: 'Need {{cost}} MP',
   },
 
-  // Common
-  common: {
-    loading: 'Loading...',
-    error: 'Error',
-    success: 'Success',
-    confirm: 'Confirm',
-    cancel: 'Cancel',
-    close: 'Close'
-  }
+  breed: {
+    title: 'Breeding System',
+    selectTwo: 'Select two lobsters to breed',
+    selectTwoWithTime: 'Select two lobsters to breed. Time required: {{time}}!',
+    breeding: 'Breeding...',
+    timeRequired: 'Time required: {{time}}',
+    demoMode: 'Demo Mode: 10s | Live: 4 hours',
+    demoWarning: '⚠️ Demo Mode: {{demo}} | Live: {{live}}',
+    hatching: 'Hatching...',
+    remainingTime: 'Remaining Time',
+    breedingInProgress: 'Breeding in progress',
+    demoModeAccelerated: '⚡ Demo mode accelerating',
+    blockchainConfirm: '⛽ Blockchain confirming, please wait',
+    startBreeding: 'Start Breeding',
+    newBabyAdded: 'New baby has been added to your collection!',
+    viewMyPets: 'View My Pets',
+    connectWallet: 'Please connect wallet',
+    buy: 'Buy',
+    sell: 'Sell',
+    listedPets: 'Listed Pets',
+    petsForSale: 'My Pets (Click to List)',
+    listForSale: 'List for Sale',
+    removeFromSale: 'Remove',
+    generation: 'Gen {{gen}}',
+    myPets: 'My Lobsters',
+    elementCount: '{{count}} attributes',
+    fiveElementLegend: '✨ Legendary Five-Element Dragon! ✨',
+    babyNamePrefix: 'LobBaby',
+    ruleSameGeneration: 'Breeding requires two pets from the same generation.',
+    ruleMaleFemale: 'Breeding requires one male and one female pet.',
+    ruleGathering: 'Gathering pets cannot breed.',
+    ruleHint: 'Rule: same generation + one male + one female.',
+  },
+
+  gather: {
+    connectWallet: 'Please connect wallet',
+    title: 'Ocean Gathering',
+    subtitle: 'Send your lobster to gather magic potion ingredients in the deep sea',
+    noPets: 'No lobsters available. Get your first pet first.',
+    goDashboard: 'Back to My Pets',
+    choosePet: 'Choose a lobster for gathering',
+    start: 'Start Gathering',
+    durationHint: 'Each gathering takes 1 hour and yields 1 magic potion.',
+    readyTitle: 'Gathering Complete',
+    progressTitle: 'Gathering In Progress',
+    activePet: 'Current pet: {{name}}',
+    claimOne: 'Claim 1 Magic Potion',
+    remaining: 'Remaining time',
+    busyButton: 'Gathering',
+    busyBadge: 'Gathering... {{time}} left',
+    busyBattle: 'This lobster is gathering. Battle unlocks in {{time}}.',
+    busyBreed: 'Breed Locked',
+    busyPotion: 'Cannot use while gathering',
+    syncHint: '{{name}} is gathering now ({{time}} left)',
+    syncHintInPage: 'This lobster is locked for battle and breeding while gathering.',
+  },
+
+  market: {
+    title: 'NFT Market',
+    buy: 'Buy',
+    sell: 'Sell',
+    buyPets: 'Buy NFT lobsters listed by other players',
+    sellPets: 'Sell your NFT lobsters',
+    price: 'Price',
+    level: 'Level',
+    attack: 'Attack',
+    defense: 'Defense',
+    purchase: 'Purchase',
+    connectWallet: 'Please connect wallet',
+    setPrice: 'Set price (ETH)',
+    listed: 'Listed',
+    notListed: 'Not Listed',
+    purchaseAlert: 'Purchase {{name}} for {{price}} ETH?\\n\\n{{confirm}}',
+    listedSuccess: '{{name}} listed for sale!',
+    samplePets: {
+      dragonKing: 'Dragon King',
+      aquaSpirit: 'Aqua Spirit',
+      goldCoin: 'Gold Coin',
+      woody: 'Woody',
+      rocky: 'Rocky',
+    },
+  },
 };

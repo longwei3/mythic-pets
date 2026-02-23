@@ -14,8 +14,8 @@ const notoSansSC = Noto_Sans_SC({
 });
 
 export const metadata: Metadata = {
-  title: "Lobster Ranch - 萌龙牧场 Web3 Game",
-  description: "收集、对战与繁殖萌萌的小龙龙。在 Base 链上体验 Web3 宠物养成游戏。",
+  title: "MythicPets",
+  description: "MythicPets",
   icons: {
     icon: "/favicon.ico",
   },
@@ -27,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh">
+    <html lang="en">
       <body
         className={`${inter.variable} ${notoSansSC.variable} antialiased bg-slate-900 text-white`}
       >

@@ -7,6 +7,9 @@ import { useAccount } from 'wagmi';
 import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { playBreedSound } from '@/lib/sounds';
+import { localizePetName } from '@/lib/petNames';
+import { readActiveGatherTask } from '@/lib/magicPotions';
+import { normalizePetRarity, type PetRarity } from '@/lib/petRarity';
 
 type Element = 'gold' | 'wood' | 'water' | 'fire' | 'earth';
 type Gender = 'male' | 'female';
@@ -17,9 +20,15 @@ interface Pet {
   element: Element[];
   gender: Gender;
   level: number;
-  rarity: string;
+  hp: number;
+  maxHp: number;
+  mp: number;
+  maxMp: number;
+  rarity: PetRarity;
   generation?: number;
 }
+
+const VALID_ELEMENTS: Element[] = ['gold', 'wood', 'water', 'fire', 'earth'];
 
 const elementColors: Record<Element, { bg: string; border: string; text: string; icon: string }> = {
   gold: { bg: 'bg-yellow-500/20', border: 'border-yellow-500', text: 'text-yellow-400', icon: '🪙' },
@@ -29,42 +38,160 @@ const elementColors: Record<Element, { bg: string; border: string; text: string;
   earth: { bg: 'bg-amber-700/20', border: 'border-amber-600', text: 'text-amber-500', icon: '🪨' },
 };
 
-// 4小时 = 14400秒
+const genderColors: Record<Gender, { text: string; bg: string }> = {
+  male: { text: 'text-red-400', bg: 'bg-red-500/30' },
+  female: { text: 'text-pink-400', bg: 'bg-pink-500/30' },
+};
+
 const BREEDING_TIME_SECONDS = 4 * 60 * 60;
-// 演示模式用 10 秒
 const DEMO_MODE = true;
 const DEMO_BREEDING_TIME = 10;
 
 export default function Breed() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { isConnected } = useAccount();
   const [selectedPets, setSelectedPets] = useState<number[]>([]);
   const [breeding, setBreeding] = useState(false);
   const [breedStartTime, setBreedStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
-  const [result, setResult] = useState<{ name: string; element: Element[]; gender: Gender; rarity: string; generation?: number } | null>(null);
+  const [result, setResult] = useState<{
+    name: string;
+    element: Element[];
+    gender: Gender;
+    rarity: PetRarity;
+    generation?: number;
+  } | null>(null);
+  const [gatherBusyPetId, setGatherBusyPetId] = useState<number | null>(null);
+  const [gatherRemainingMs, setGatherRemainingMs] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const myPets: Pet[] = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('myPets') || '[]') : [];
+  const normalizeElements = (element: Element[] | Element | undefined): Element[] => {
+    const source = Array.isArray(element) ? element : [element];
+    const normalized = source.filter(
+      (value): value is Element => typeof value === 'string' && VALID_ELEMENTS.includes(value as Element),
+    );
+    return normalized.length > 0 ? normalized : ['water'];
+  };
 
-  // 计时器
+  const readLocalPets = (): Pet[] => {
+    try {
+      const raw = localStorage.getItem('myPets');
+      if (!raw) {
+        return [];
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        localStorage.removeItem('myPets');
+        return [];
+      }
+      return parsed.map((p: any) => ({
+        ...p,
+        element: normalizeElements(p.element),
+        rarity: normalizePetRarity(p.rarity),
+        level: typeof p.level === 'number' && p.level > 0 ? p.level : 1,
+        maxHp:
+          typeof p.maxHp === 'number' && p.maxHp > 0
+            ? p.maxHp
+            : typeof p.hp === 'number' && p.hp > 0
+              ? p.hp
+              : 50,
+        hp:
+          typeof p.hp === 'number' && p.hp >= 0
+            ? p.hp
+            : typeof p.maxHp === 'number' && p.maxHp > 0
+              ? p.maxHp
+              : 50,
+        maxMp:
+          typeof p.maxMp === 'number' && p.maxMp > 0
+            ? p.maxMp
+            : typeof p.mp === 'number' && p.mp > 0
+              ? p.mp
+              : 30 + (typeof p.level === 'number' && p.level > 0 ? p.level : 1) * 5,
+        mp:
+          typeof p.mp === 'number' && p.mp >= 0
+            ? p.mp
+            : typeof p.maxMp === 'number' && p.maxMp > 0
+              ? p.maxMp
+              : 30 + (typeof p.level === 'number' && p.level > 0 ? p.level : 1) * 5,
+      }));
+    } catch {
+      localStorage.removeItem('myPets');
+      return [];
+    }
+  };
+
+  useEffect(() => {
+    if (!isConnected) {
+      return;
+    }
+
+    const syncGatherState = () => {
+      const activeTask = readActiveGatherTask();
+      if (activeTask) {
+        setGatherBusyPetId(activeTask.petId);
+        setGatherRemainingMs(Math.max(0, activeTask.endsAt - Date.now()));
+      } else {
+        setGatherBusyPetId(null);
+        setGatherRemainingMs(0);
+      }
+    };
+
+    syncGatherState();
+    const timer = setInterval(syncGatherState, 1000);
+    return () => clearInterval(timer);
+  }, [isConnected]);
+
+  const myPets: Pet[] =
+    typeof window !== 'undefined'
+      ? (() => {
+          return readLocalPets();
+        })()
+      : [];
+
+  const selectedPetDetails = selectedPets
+    .map((petId) => myPets.find((pet) => pet.id === petId))
+    .filter((pet): pet is Pet => Boolean(pet));
+
+  const breedingRuleErrorKey = (() => {
+    if (selectedPetDetails.length !== 2) {
+      return null;
+    }
+    const [first, second] = selectedPetDetails;
+    if ((gatherBusyPetId && first.id === gatherBusyPetId) || (gatherBusyPetId && second.id === gatherBusyPetId)) {
+      return 'breed.ruleGathering';
+    }
+    if ((first.generation || 1) !== (second.generation || 1)) {
+      return 'breed.ruleSameGeneration';
+    }
+    if (first.gender === second.gender) {
+      return 'breed.ruleMaleFemale';
+    }
+    return null;
+  })();
+
+  const canStartBreeding = selectedPets.length === 2 && !breedingRuleErrorKey;
+
   useEffect(() => {
     if (breeding && breedStartTime) {
       timerRef.current = setInterval(() => {
         const elapsed = Math.floor((Date.now() - breedStartTime) / 1000);
         setElapsedTime(elapsed);
-        
+
         const breedingTime = DEMO_MODE ? DEMO_BREEDING_TIME : BREEDING_TIME_SECONDS;
-        
+
         if (elapsed >= breedingTime) {
-          if (timerRef.current) clearInterval(timerRef.current);
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+          }
           finishBreeding();
         }
       }, 1000);
     }
-    
+
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
     };
   }, [breeding, breedStartTime]);
 
@@ -72,32 +199,26 @@ export default function Breed() {
     playBreedSound();
     const allElements: Element[] = ['gold', 'wood', 'water', 'fire', 'earth'];
     const genders: Gender[] = ['male', 'female'];
-    const rarities = ['common', 'rare', 'epic', 'legendary'];
-    
-    const parent1 = myPets.find(p => p.id === selectedPets[0])!;
-    const parent2 = myPets.find(p => p.id === selectedPets[1])!;
-    
-    // 计算代数：取父母代数的最大值 + 1
+    const rarities: PetRarity[] = ['common', 'rare', 'epic', 'legendary'];
+
+    const parent1 = myPets.find((p) => p.id === selectedPets[0])!;
+    const parent2 = myPets.find((p) => p.id === selectedPets[1])!;
+
     const parent1Gen = parent1.generation || 1;
     const parent2Gen = parent2.generation || 1;
     const newGeneration = Math.max(parent1Gen, parent2Gen) + 1;
-    
-    // 生成后代属性：1% 概率 5 属性，否则随机 1-4 个
+
     let newElements: Element[];
-    const fiveElementChance = Math.random() < 0.01; // 1%
-    
+    const fiveElementChance = Math.random() < 0.01;
+
     if (fiveElementChance) {
-      // 1% 概率：5 个属性
       newElements = [...allElements];
     } else {
-      // 99% 概率：1-4 个属性
       const numElements = Math.floor(Math.random() * 4) + 1;
-      // 从父母属性中继承
       const parentElements = [...new Set([...parent1.element, ...parent2.element])];
       newElements = [];
-      
-      // 70% 概率从父母继承，30% 概率随机新属性
-      for (let i = 0; i < numElements; i++) {
+
+      for (let i = 0; i < numElements; i += 1) {
         if (Math.random() < 0.7 && parentElements.length > 0) {
           const idx = Math.floor(Math.random() * parentElements.length);
           newElements.push(parentElements[idx]);
@@ -105,15 +226,18 @@ export default function Breed() {
           newElements.push(allElements[Math.floor(Math.random() * allElements.length)]);
         }
       }
-      // 去重
       newElements = [...new Set(newElements)];
     }
-    
+
+    const babyNumber = Math.floor(Math.random() * 1000);
+    const canonicalBabyName = `LobBaby${babyNumber}`;
+    const newPetMaxMp = 35 + Math.floor(Math.random() * 10);
+
     const newPet = {
       element: newElements,
       gender: genders[Math.floor(Math.random() * genders.length)] as Gender,
       rarity: rarities[Math.floor(Math.random() * rarities.length)],
-      name: `小龙龙${Math.floor(Math.random() * 1000)}`,
+      name: canonicalBabyName,
       level: 1,
       generation: newGeneration,
       exp: 0,
@@ -122,51 +246,61 @@ export default function Breed() {
       defense: 10 + Math.floor(Math.random() * 8),
       hp: 45 + Math.floor(Math.random() * 15),
       maxHp: 45 + Math.floor(Math.random() * 15),
+      mp: newPetMaxMp,
+      maxMp: newPetMaxMp,
     };
-    
+
     setResult({
       element: newPet.element,
       gender: newPet.gender,
       rarity: newPet.rarity,
       name: newPet.name,
-      generation: newPet.generation
+      generation: newPet.generation,
     });
-    
-    // 保存到 localStorage - 获取已有宠物并添加新宠物
-    const existingPets = JSON.parse(localStorage.getItem('myPets') || '[]');
+
+    const existingPets = readLocalPets();
     const newPetWithId = { ...newPet, id: Date.now() };
     localStorage.setItem('myPets', JSON.stringify([...existingPets, newPetWithId]));
-    
+
     setBreeding(false);
     setBreedStartTime(null);
     setElapsedTime(0);
   };
 
   const startBreeding = () => {
-    if (selectedPets.length !== 2) return;
-    
+    if (!canStartBreeding) {
+      return;
+    }
+
     setBreeding(true);
     setResult(null);
     setBreedStartTime(Date.now());
     setElapsedTime(0);
   };
 
-  const formatTime = (seconds: number): string => {
+  const formatDuration = (seconds: number): string => {
+    const isZh = (i18n.resolvedLanguage ?? i18n.language).startsWith('zh');
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
-    
-    if (DEMO_MODE) {
+
+    if (isZh) {
+      if (hrs > 0) {
+        return `${hrs}小时${mins}分${secs}秒`;
+      }
+      if (mins > 0) {
+        return `${mins}分${secs}秒`;
+      }
       return `${secs}秒`;
     }
-    
+
     if (hrs > 0) {
-      return `${hrs}小时${mins}分${secs}秒`;
-    } else if (mins > 0) {
-      return `${mins}分${secs}秒`;
-    } else {
-      return `${secs}秒`;
+      return `${hrs}h ${mins}m ${secs}s`;
     }
+    if (mins > 0) {
+      return `${mins}m ${secs}s`;
+    }
+    return `${secs}s`;
   };
 
   const getRemainingTime = (): number => {
@@ -180,9 +314,12 @@ export default function Breed() {
   };
 
   const togglePet = (id: number) => {
-    if (breeding) return;
+    if (breeding || gatherBusyPetId === id) {
+      return;
+    }
+
     if (selectedPets.includes(id)) {
-      setSelectedPets(selectedPets.filter(p => p !== id));
+      setSelectedPets(selectedPets.filter((p) => p !== id));
     } else if (selectedPets.length < 2) {
       setSelectedPets([...selectedPets, id]);
     }
@@ -192,21 +329,24 @@ export default function Breed() {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-2xl text-white mb-4">请先连接钱包</h2>
+          <h2 className="text-2xl text-white mb-4">{t('breed.connectWallet')}</h2>
           <ConnectButton />
         </div>
       </div>
     );
   }
 
+  const demoDurationLabel = formatDuration(DEMO_BREEDING_TIME);
+  const liveDurationLabel = formatDuration(BREEDING_TIME_SECONDS);
+  const activeDurationLabel = DEMO_MODE ? demoDurationLabel : liveDurationLabel;
+
   return (
     <div className="min-h-screen bg-slate-900">
-      {/* Header */}
       <header className="flex items-center justify-between px-6 py-4 bg-slate-800/50 backdrop-blur-sm">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center gap-2">
             <span className="text-2xl">🦞</span>
-            <span className="text-xl font-bold text-white">Lobster Ranch</span>
+            <span className="text-xl font-bold text-white">{t('common.appName')}</span>
           </Link>
           <nav className="flex gap-4 ml-8">
             <Link href="/dashboard" className="text-slate-400 hover:text-white">
@@ -218,8 +358,11 @@ export default function Breed() {
             <Link href="/breed" className="text-indigo-400 hover:text-indigo-300">
               {t('nav.breed')}
             </Link>
+            <Link href="/gather" className="text-slate-400 hover:text-white">
+              {t('nav.gather')}
+            </Link>
             <Link href="/market" className="text-slate-400 hover:text-white">
-              🏪 市场
+              🏪 {t('nav.market')}
             </Link>
           </nav>
         </div>
@@ -229,100 +372,111 @@ export default function Breed() {
         </div>
       </header>
 
-      {/* Breed Page */}
       <main className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-white text-center mb-8">🐣 繁殖系统</h1>
+        <h1 className="text-3xl font-bold text-white text-center mb-8">🐣 {t('breed.title')}</h1>
 
         {DEMO_MODE && (
           <div className="text-center mb-4">
             <span className="px-4 py-2 bg-yellow-500/20 text-yellow-400 rounded-full text-sm">
-              ⚠️ 演示模式：10秒完成 | 正式版：4小时
+              {t('breed.demoWarning', { demo: demoDurationLabel, live: liveDurationLabel })}
             </span>
           </div>
         )}
 
         <div className="max-w-2xl mx-auto">
           <p className="text-center text-slate-400 mb-8">
-            选择两只龙虾进行繁殖，需要 {DEMO_MODE ? '10秒' : '4小时'} 才能孵化出宝宝！
+            {t('breed.selectTwoWithTime', { time: activeDurationLabel })}
           </p>
 
-          {/* Pet Selection */}
           <div className="grid grid-cols-3 gap-4 mb-8">
             {myPets.map((pet) => (
               <button
                 key={pet.id}
                 onClick={() => togglePet(pet.id)}
-                disabled={breeding}
+                disabled={breeding || gatherBusyPetId === pet.id}
                 className={`p-4 rounded-xl border-2 transition-all ${
                   selectedPets.includes(pet.id)
                     ? 'border-indigo-500 bg-indigo-500/20'
                     : `border-slate-600 bg-slate-800 hover:border-slate-500 ${elementColors[pet.element[0]].bg}`
-                } ${breeding ? 'opacity-50 cursor-not-allowed' : ''}`}
+                } ${breeding || gatherBusyPetId === pet.id ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <div className="flex justify-between items-start mb-2">
                   <span className="text-xl">{elementColors[pet.element[0]].icon}</span>
-                  <span className={`px-2 py-0.5 rounded text-xs ${pet.gender === 'male' ? 'bg-red-500/30 text-red-400' : 'bg-pink-500/30 text-pink-400'}`}>
+                  <span
+                    className={`px-2 py-0.5 rounded text-xs ${genderColors[pet.gender].bg} ${genderColors[pet.gender].text}`}
+                  >
                     {pet.gender === 'male' ? '♂' : '♀'}
                   </span>
                 </div>
-                <div className="text-4xl text-center mb-2">🦞</div>
-                <div className="text-white font-medium text-center">{pet.name}</div>
-                <div className={`text-center text-xs mt-1 ${elementColors[pet.element[0]].text}`}>
-                  {pet.element.join('/').toUpperCase()}
+                <div className="text-center mb-2">
+                  <span
+                    className={`inline-block text-4xl p-2 rounded-full ${genderColors[pet.gender].bg} ${
+                      pet.gender === 'female'
+                        ? 'ring-2 ring-purple-400/80 ring-offset-1 ring-offset-slate-900'
+                        : 'ring-2 ring-red-400/80 ring-offset-1 ring-offset-slate-900'
+                    }`}
+                  >
+                    <span className={pet.gender === 'female' ? 'female-lobster-body' : ''}>🦞</span>
+                  </span>
                 </div>
+                <div className="text-white font-medium text-center">{localizePetName(pet.name, t)}</div>
+                <div className={`text-center text-xs mt-1 ${elementColors[pet.element[0]].text}`}>
+                  {pet.element.map((element) => t(`dashboard.element.${element}`)).join('/')}
+                </div>
+                {gatherBusyPetId === pet.id && (
+                  <div className="text-center text-xs mt-2 text-blue-300">
+                    🌊 {t('gather.busyBadge', { time: formatDuration(Math.ceil(gatherRemainingMs / 1000)) })}
+                  </div>
+                )}
               </button>
             ))}
           </div>
 
-          {/* Breeding Progress */}
           {breeding && (
             <div className="mb-8 text-center">
               <div className="text-6xl mb-4 animate-pulse">🥚</div>
-              <h3 className="text-xl text-white mb-4">孵化中...</h3>
-              
-              {/* 倒计时 */}
+              <h3 className="text-xl text-white mb-4">{t('breed.hatching')}</h3>
+
               <div className="bg-slate-800 rounded-2xl p-6 max-w-sm mx-auto mb-4">
-                <p className="text-slate-400 text-sm mb-2">剩余时间</p>
-                <p className="text-4xl font-bold text-indigo-400">
-                  {formatTime(getRemainingTime())}
-                </p>
+                <p className="text-slate-400 text-sm mb-2">{t('breed.remainingTime')}</p>
+                <p className="text-4xl font-bold text-indigo-400">{formatDuration(getRemainingTime())}</p>
               </div>
-              
-              {/* 进度条 */}
+
               <div className="w-full max-w-md mx-auto h-4 bg-slate-700 rounded-full overflow-hidden mb-4">
-                <div 
+                <div
                   className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all"
                   style={{ width: `${getProgress()}%` }}
                 />
               </div>
-              
+
               <p className="text-sm text-slate-500">
-                {DEMO_MODE ? '⚡ 演示模式加速中' : '⛽ 区块链确认中，请耐心等待'}
+                {DEMO_MODE ? t('breed.demoModeAccelerated') : t('breed.blockchainConfirm')}
               </p>
             </div>
           )}
 
-          {/* Breed Button */}
           {!breeding && (
             <div className="text-center">
               <button
                 onClick={startBreeding}
-                disabled={selectedPets.length !== 2}
+                disabled={!canStartBreeding}
                 className={`px-8 py-4 rounded-full text-xl font-semibold transition-all ${
-                  selectedPets.length === 2
+                  canStartBreeding
                     ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transform hover:scale-105'
                     : 'bg-slate-700 text-slate-500 cursor-not-allowed'
                 }`}
               >
-                🐣 开始繁殖
+                🐣 {t('breed.startBreeding')}
               </button>
+              {selectedPets.length === 2 && breedingRuleErrorKey && (
+                <p className="mt-3 text-sm text-red-400">{t(breedingRuleErrorKey)}</p>
+              )}
+              <p className="mt-3 text-xs text-slate-400">{t('breed.ruleHint')}</p>
             </div>
           )}
 
-          {/* Breeding Result */}
           {result && !breeding && (
-            <div className="mt-12 text-center animate-fade-in">
-              {/* 5属性特效 */}
+            <div className="mt-12 text-center animate-fade-in relative">
               {result.element.length === 5 && (
                 <div className="mb-4">
                   <span className="text-4xl animate-pulse">✨</span>
@@ -330,63 +484,83 @@ export default function Breed() {
                   <span className="text-4xl animate-pulse">✨</span>
                 </div>
               )}
-              
-              <div className={`inline-block text-9xl p-8 rounded-full ${elementColors[result.element[0]].bg} animate-bounce hover:scale-110 transition-transform`}>
-                <span className="animate-wiggle inline-block">🦞</span>
+
+              <div
+                className={`inline-block text-9xl p-8 rounded-full ${
+                  result.gender === 'female' ? genderColors.female.bg : elementColors[result.element[0]].bg
+                } ${
+                  result.gender === 'female'
+                    ? 'ring-2 ring-purple-400/80 ring-offset-2 ring-offset-slate-900'
+                    : 'ring-2 ring-red-400/80 ring-offset-2 ring-offset-slate-900'
+                } animate-bounce hover:scale-110 transition-transform`}
+              >
+                <span
+                  className={`animate-wiggle inline-block ${result.gender === 'female' ? 'female-lobster-body' : ''}`}
+                >
+                  🦞
+                </span>
               </div>
-              
-              {/* 5属性金色光环 */}
+
               {result.element.length === 5 && (
                 <div className="absolute inset-0 pointer-events-none">
                   <div className="absolute inset-0 rounded-full bg-gradient-to-r from-yellow-500/30 via-amber-500/20 to-yellow-500/30 animate-pulse" />
                 </div>
               )}
-              
-              <h3 className="text-3xl font-bold text-white mt-4">{result.name}</h3>
-              
-              {/* 代数 */}
+
+              <h3 className="text-3xl font-bold text-white mt-4">{localizePetName(result.name, t)}</h3>
+
               <p className="text-lg text-indigo-400 mt-1">
-                第 {result.generation || 1} 代
+                {t('breed.generation', { gen: result.generation || 1 })}
               </p>
-              
-              {/* 多属性显示 */}
+
               <div className="flex justify-center items-center gap-2 mt-2">
                 {result.element.map((el, idx) => (
-                  <span key={idx} className="text-3xl animate-bounce" style={{ animationDelay: `${idx * 0.1}s` }} title={el}>
+                  <span
+                    key={idx}
+                    className="text-3xl animate-bounce"
+                    style={{ animationDelay: `${idx * 0.1}s` }}
+                    title={t(`dashboard.element.${el}`)}
+                  >
                     {elementColors[el].icon}
                   </span>
                 ))}
               </div>
               <p className={`text-sm mt-1 ${elementColors[result.element[0]].text}`}>
-                {result.element.map(e => e.toUpperCase()).join('/')} ({result.element.length}属性)
+                {result.element.map((e) => t(`dashboard.element.${e}`)).join('/')} ({t('breed.elementCount', {
+                  count: result.element.length,
+                })})
               </p>
-              
-              {/* 5属性特效文字 */}
+
               {result.element.length === 5 && (
-                <p className="text-amber-400 font-bold mt-3 text-xl animate-pulse">✨ 传说中的五行神龙！✨</p>
+                <p className="text-amber-400 font-bold mt-3 text-xl animate-pulse">{t('breed.fiveElementLegend')}</p>
               )}
-              
-              <span className={`inline-block mt-3 px-4 py-2 rounded-full text-lg ${result.gender === 'male' ? 'bg-red-500/30 text-red-400' : 'bg-pink-500/30 text-pink-400'}`}>
-                {result.gender === 'male' ? '♂ 公' : '♀ 母'}
+
+              <span
+                className={`inline-block mt-3 px-4 py-2 rounded-full text-lg ${genderColors[result.gender].bg} ${genderColors[result.gender].text}`}
+              >
+                {result.gender === 'male'
+                  ? `♂ ${t('dashboard.gender.male')}`
+                  : `♀ ${t('dashboard.gender.female')}`}
               </span>
 
-              <p className={`text-xl mt-4 ${
-                result.rarity === 'legendary' ? 'text-amber-400' :
-                result.rarity === 'epic' ? 'text-purple-400' :
-                result.rarity === 'rare' ? 'text-blue-400' : 'text-slate-400'
-              }`}>
-                {result.rarity.toUpperCase()}!
+              <p
+                className={`text-xl mt-4 ${
+                  result.rarity === 'legendary'
+                    ? 'text-amber-400'
+                    : result.rarity === 'epic'
+                      ? 'text-purple-400'
+                      : result.rarity === 'rare'
+                        ? 'text-blue-400'
+                        : 'text-slate-400'
+                }`}
+              >
+                {t(`dashboard.rarity.${result.rarity}`, { defaultValue: result.rarity })}
               </p>
-              <p className="text-slate-400 mt-2">
-                新宝宝已添加到你的收藏！
-              </p>
-              
+              <p className="text-slate-400 mt-2">{t('breed.newBabyAdded')}</p>
+
               <div className="mt-6">
-                <Link
-                  href="/dashboard"
-                  className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-medium"
-                >
-                  查看我的宠物 🐠
+                <Link href="/dashboard" className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-medium">
+                  {t('breed.viewMyPets')} 🐠
                 </Link>
               </div>
             </div>

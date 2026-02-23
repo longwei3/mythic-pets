@@ -1,70 +1,97 @@
 export default {
-  // Navigation
+  common: {
+    appName: '萌龙牧场',
+    loading: '加载中...',
+    error: '错误',
+    success: '成功',
+    confirm: '确认',
+    cancel: '取消',
+    close: '关闭',
+    backHome: '返回首页',
+  },
+
   nav: {
     home: '首页',
     dashboard: '我的宠物',
     battle: '战斗',
     breed: '繁殖',
+    gather: '采集',
     market: '市场',
   },
 
-  // Landing Page
   landing: {
     title: '萌龙牧场',
     subtitle: '收集、对战与繁殖小萌龙',
-    description: '你的冒险从这里开始。收集萌萌的小龙龙，与对手战斗，在 Base 链上繁殖独特的 NFT 龙龙。',
+    description:
+      '你的冒险从这里开始。收集萌萌的小龙龙，与对手战斗，在 Base 链上繁殖独特的 NFT 龙龙。',
     connectWallet: '连接钱包',
     getStarted: '开始游戏',
     features: {
       collect: {
         title: '收集小龙龙',
-        description: '免费领取小龙龙，开始你的收集之旅'
+        description: '免费领取小龙龙，开始你的收集之旅',
       },
       battle: {
         title: '战斗',
-        description: '与 AI 对战，提升小龙龙等级'
+        description: '与 AI 对战，提升小龙龙等级',
       },
       breed: {
         title: '繁殖',
-        description: '通过繁殖创造独特 NFT 龙龙'
-      }
-    }
+        description: '通过繁殖创造独特 NFT 龙龙',
+      },
+    },
+    stats: {
+      wallets: '钱包数量',
+      pets: '宠物 NFT',
+      battles: '对战场次',
+    },
+    footer: '构建于 Base • AI 驱动',
   },
 
-  // Dashboard
   dashboard: {
     title: '我的宠物',
-    noPets: '还没有宠物，快去领取吧！',
-    claimFree: '免费领取宠物',
+    noPets: '还没有龙虾，快去领取吧！',
+    claimFree: '免费领取龙虾',
+    starterSoldOut: '创世宠物已领完！感谢参与，公测时优先考虑。',
+    starterPets: {
+      fire: '火焰龙虾',
+      water: '水灵龙虾',
+    },
     pet: {
       level: '等级',
       exp: '经验',
       attack: '攻击',
       defense: '防御',
       hp: '生命',
-      rarity: '稀有度'
+      mp: '魔法',
+      rarity: '稀有度',
     },
     rarity: {
       common: '普通',
       rare: '稀有',
       epic: '史诗',
       legendary: '传说',
-      mythic: '神话'
     },
     element: {
       gold: '金',
       wood: '木',
       water: '水',
       fire: '火',
-      earth: '土'
+      earth: '土',
     },
     gender: {
       male: '公',
-      female: '母'
-    }
+      female: '母',
+    },
+    myPets: '我的收藏',
+    attack: '攻击',
+    defense: '防御',
+    magicPotions: '魔法药水：{{count}}',
+    goGather: '前往采集',
+    usePotion: '服用药水（回满魔法）',
+    magicFull: '魔法已满',
   },
 
-  // Battle
   battle: {
     title: '战斗竞技场',
     startBattle: '开始战斗',
@@ -75,16 +102,118 @@ export default {
     victory: '胜利！',
     defeat: '失败！',
     expGained: '+{{exp}} 经验',
-    reward: '奖励: +{{amount}} $MYTH'
+    reward: '奖励: +{{amount}} $MYTH',
+    battleStart: '⚔️ 战斗开始！',
+    youUsed: '你使用了{{skill}}，造成 {{damage}} 伤害！',
+    enemyAttacks: '{{name}}发起攻击，造成 {{damage}} 伤害！',
+    enemyDefeated: '🎉 胜利！{{name}}被击败了！',
+    victoryText: '🏆 获得 100 经验和 10 $MYTH',
+    defeatText: '💀 失败！你的龙虾倒下了...',
+    tryAgain: '再战',
+    reconnect: '请先连接钱包',
+    battleLog: '战斗记录',
+    arena: '战斗竞技场',
+    playerDefaultName: '小红龙',
+    enemies: {
+      clownfish: '小丑鱼',
+      octopus: '章鱼哥',
+      crab: '螃蟹战士',
+      shark: '鲨鱼博士',
+      whale: '鲸鱼老师',
+    },
+    vs: '对战',
+    hp: '生命',
+    mp: '魔法',
+    rematch: '再战',
+    challengeAgain: '重新挑战',
+    victoryReward: '+100 经验, +10 $MYTH',
+    cooldownApplied: '战败冷却：10分钟',
+    cooldownNotice: '冷却中，{{time}} 后可再次战斗',
+    cooldownButton: '冷却中 {{time}}',
+    noMana: '魔法不足，特殊技能需要 {{cost}} 点魔法。',
+    needMana: '需要 {{cost}} 点魔法',
   },
 
-  // Common
-  common: {
-    loading: '加载中...',
-    error: '错误',
-    success: '成功',
-    confirm: '确认',
-    cancel: '取消',
-    close: '关闭'
-  }
+  breed: {
+    title: '繁殖系统',
+    selectTwo: '选择两只龙虾进行繁殖',
+    selectTwoWithTime: '选择两只龙虾进行繁殖，需要时间：{{time}}！',
+    breeding: '繁殖中...',
+    timeRequired: '需要时间: {{time}}',
+    demoMode: '演示模式: 10秒 | 正式版: 4小时',
+    demoWarning: '⚠️ 演示模式：{{demo}} | 正式版：{{live}}',
+    hatching: '孵化中...',
+    remainingTime: '剩余时间',
+    breedingInProgress: '正在繁殖',
+    demoModeAccelerated: '⚡ 演示模式加速中',
+    blockchainConfirm: '⛽ 区块链确认中，请耐心等待',
+    startBreeding: '开始繁殖',
+    newBabyAdded: '新宝宝已添加到你的收藏！',
+    viewMyPets: '查看我的宠物',
+    connectWallet: '请先连接钱包',
+    buy: '购买',
+    sell: '出售',
+    listedPets: '已挂单',
+    petsForSale: '我的宠物（点击挂单）',
+    listForSale: '挂单出售',
+    removeFromSale: '下架',
+    generation: '第{{gen}}代',
+    myPets: '我的龙虾',
+    elementCount: '{{count}}属性',
+    fiveElementLegend: '✨ 传说中的五行神龙！✨',
+    babyNamePrefix: '龙宝宝',
+    ruleSameGeneration: '繁殖要求两只宠物必须同一代。',
+    ruleMaleFemale: '繁殖要求一公一母。',
+    ruleGathering: '采集中的龙虾不能繁殖。',
+    ruleHint: '规则：同一代 + 一公 + 一母。',
+  },
+
+  gather: {
+    connectWallet: '请先连接钱包',
+    title: '海底采集',
+    subtitle: '派遣龙虾去深海采集魔法药水材料',
+    noPets: '暂无可用龙虾，请先领取宠物。',
+    goDashboard: '返回我的宠物',
+    choosePet: '选择一只龙虾去采集',
+    start: '开始采集',
+    durationHint: '每次采集 1 小时，可获得 1 瓶魔法药水。',
+    readyTitle: '采集完成',
+    progressTitle: '采集中',
+    activePet: '当前采集宠物：{{name}}',
+    claimOne: '领取 1 瓶魔法药水',
+    remaining: '剩余时间',
+    busyButton: '采集中',
+    busyBadge: '采集中，剩余 {{time}}',
+    busyBattle: '该龙虾正在采集，{{time}} 后可战斗。',
+    busyBreed: '繁殖锁定',
+    busyPotion: '采集中不可服用',
+    syncHint: '{{name}} 正在采集（剩余 {{time}}）',
+    syncHintInPage: '采集中该龙虾会同步锁定，不能战斗和繁殖。',
+  },
+
+  market: {
+    title: 'NFT 市场',
+    buy: '购买',
+    sell: '出售',
+    buyPets: '购买其他玩家出售的龙虾 NFT',
+    sellPets: '出售你的龙虾 NFT',
+    price: '价格',
+    level: '等级',
+    attack: '攻击',
+    defense: '防御',
+    purchase: '购买',
+    connectWallet: '请先连接钱包',
+    setPrice: '设置价格 (ETH)',
+    listed: '已挂单',
+    notListed: '未挂单',
+    purchaseAlert: '是否花费 {{price}} ETH 购买 {{name}}？\\n\\n{{confirm}}',
+    listedSuccess: '{{name}} 已挂单！',
+    samplePets: {
+      dragonKing: '龙王',
+      aquaSpirit: '水灵',
+      goldCoin: '金币',
+      woody: '木木',
+      rocky: '岩岩',
+    },
+  },
 };

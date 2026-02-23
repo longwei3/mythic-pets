@@ -33,6 +33,26 @@
   50% { opacity: 0.5; transform: scale(1.2); }
 }
 
+@keyframes oceanWave {
+  0% { transform: translateX(-10%); }
+  50% { transform: translateX(6%); }
+  100% { transform: translateX(-10%); }
+}
+
+@keyframes bubbleRise {
+  0% {
+    transform: translateY(20px) scale(0.8);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translateY(-120vh) scale(1.15);
+    opacity: 0;
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -60,4 +80,48 @@ body {
 /* RainbowKit customizations */
 .rainbowkit-modal {
   backdrop-filter: blur(8px);
+}
+
+/* Female lobster body tint */
+.female-lobster-body {
+  filter: hue-rotate(305deg) saturate(1.9) brightness(1.1);
+}
+
+.ocean-backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(56, 189, 248, 0.22), transparent 40%),
+    radial-gradient(circle at 80% 0%, rgba(45, 212, 191, 0.18), transparent 45%),
+    linear-gradient(180deg, #082f49 0%, #0f172a 55%, #020617 100%);
+  z-index: 0;
+}
+
+.ocean-surface-wave {
+  position: absolute;
+  top: -5%;
+  left: -10%;
+  width: 130%;
+  height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, rgba(125, 211, 252, 0.35), rgba(14, 116, 144, 0.12));
+  filter: blur(8px);
+  animation: oceanWave 8s ease-in-out infinite;
+  z-index: 0;
+}
+
+.ocean-bubble {
+  position: absolute;
+  bottom: -32px;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  border: 1px solid rgba(186, 230, 253, 0.5);
+  background: rgba(186, 230, 253, 0.18);
+  backdrop-filter: blur(1px);
+  pointer-events: none;
+  z-index: 0;
+  animation-name: bubbleRise;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
 }
