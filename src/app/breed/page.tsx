@@ -227,18 +227,26 @@ export default function Breed() {
           {breeding && (
             <div className="mb-8 text-center">
               <div className="text-6xl mb-4 animate-pulse">🥚</div>
-              <h3 className="text-xl text-white mb-2">孵化中...</h3>
-              <p className="text-slate-400 mb-4">
-                剩余时间：{formatTime(getRemainingTime())}
-              </p>
-              <div className="w-full max-w-md mx-auto h-4 bg-slate-700 rounded-full overflow-hidden">
+              <h3 className="text-xl text-white mb-4">孵化中...</h3>
+              
+              {/* 倒计时 */}
+              <div className="bg-slate-800 rounded-2xl p-6 max-w-sm mx-auto mb-4">
+                <p className="text-slate-400 text-sm mb-2">剩余时间</p>
+                <p className="text-4xl font-bold text-indigo-400">
+                  {formatTime(getRemainingTime())}
+                </p>
+              </div>
+              
+              {/* 进度条 */}
+              <div className="w-full max-w-md mx-auto h-4 bg-slate-700 rounded-full overflow-hidden mb-4">
                 <div 
                   className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all"
                   style={{ width: `${getProgress()}%` }}
                 />
               </div>
-              <p className="text-sm text-slate-500 mt-2">
-                {DEMO_MODE ? '演示模式加速中' : '区块链确认中，请耐心等待'}
+              
+              <p className="text-sm text-slate-500">
+                {DEMO_MODE ? '⚡ 演示模式加速中' : '⛽ 区块链确认中，请耐心等待'}
               </p>
             </div>
           )}
