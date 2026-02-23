@@ -17,6 +17,14 @@ interface Pet {
   image: string;
 }
 
+const oceanEnemies = [
+  { name: '小丑鱼', level: 3, hp: 60, maxHp: 60, attack: 25, defense: 15, image: '🐠' },
+  { name: '章鱼哥', level: 4, hp: 80, maxHp: 80, attack: 35, defense: 20, image: '🐙' },
+  { name: '螃蟹战士', level: 5, hp: 100, maxHp: 100, attack: 40, defense: 30, image: '🦀' },
+  { name: '鲨鱼博士', level: 6, hp: 120, maxHp: 120, attack: 50, defense: 25, image: '🦈' },
+  { name: '鲸鱼老师', level: 7, hp: 150, maxHp: 150, attack: 45, defense: 35, image: '🐋' },
+];
+
 export default function Battle() {
   const { t } = useTranslation();
   const { isConnected } = useAccount();
@@ -30,19 +38,31 @@ export default function Battle() {
     defense: 30,
     image: '🦞'
   });
-  const [enemyPet, setEnemyPet] = useState<Pet>({
-    name: '麻辣小龙虾',
-    level: 4,
-    hp: 80,
-    maxHp: 80,
-    attack: 35,
-    defense: 20,
-    image: '🦞'
-  });
+  const [enemyPet, setEnemyPet] = useState<Pet>(oceanEnemies[0]);
   const [logs, setLogs] = useState<string[]>([]);
+  const [attackEffect, setAttackEffect] = useState<'none' | 'hit' | 'special'>('none');
+  const [shake, setShake] = useState(false);
+
+  const startBattle = () => {
+    const randomEnemy = oceanEnemies[Math.floor(Math.random() * oceanEnemies.length)];
+    setEnemyPet(randomEnemy);
+    setBattleState('fighting');
+    setPlayerPet({ ...playerPet, hp: playerPet.maxHp });
+    setEnemyPet({ ...randomEnemy, hp: randomEnemy.maxHp });
+    setLogs(['⚔️ 战斗开始！']);
+  };
 
   const attack = (isSpecial: boolean) => {
     if (battleState !== 'fighting') return;
+
+    // Attack effect
+    setAttackEffect(isSpecial ? 'special' : 'hit');
+    setShake(true);
+    
+    setTimeout(() => {
+      setAttackEffect('none');
+      setShake(false);
+    }, 500);
 
     const damage = isSpecial 
       ? Math.floor(playerPet.attack * 1.5 - enemyPet.defense * 0.5)
@@ -51,32 +71,28 @@ export default function Battle() {
     const newEnemyHp = Math.max(0, enemyPet.hp - damage);
     setEnemyPet({ ...enemyPet, hp: newEnemyHp });
     
-    setLogs(prev => [...prev, `你使用了${isSpecial ? '特殊技能' : '普通攻击'}，造成 ${damage} 伤害！`]);
+    setLogs(prev => [...prev, `你使用了${isSpecial ? '🔥必杀技' : '⚔️普通攻击'}，造成 ${damage} 伤害！`]);
 
     if (newEnemyHp <= 0) {
       setBattleState('victory');
-      setLogs(prev => [...prev, `🎉 胜利！获得 100 经验和 10 $MYTH`]);
+      setLogs(prev => [...prev, `🎉 胜利！${enemyPet.name}被击败了！`, '🏆 获得 100 经验和 10 $MYTH']);
     } else {
       // Enemy counter attack
       setTimeout(() => {
+        setShake(true);
+        setTimeout(() => setShake(false), 500);
+        
         const enemyDamage = Math.floor(enemyPet.attack - playerPet.defense * 0.5);
         const newPlayerHp = Math.max(0, playerPet.hp - enemyDamage);
         setPlayerPet({ ...playerPet, hp: newPlayerHp });
-        setLogs(prev => [...prev, `麻辣小龙虾反击，造成 ${enemyDamage} 伤害！`]);
+        setLogs(prev => [...prev, `${enemyPet.name}发起攻击，造成 ${enemyDamage} 伤害！`]);
         
         if (newPlayerHp <= 0) {
           setBattleState('defeat');
-          setLogs(prev => [...prev, '💀 失败！再接再厉！']);
+          setLogs(prev => [...prev, '💀 失败！你的龙虾倒下了...', '再接再厉，下次一定能赢！']);
         }
       }, 800);
     }
-  };
-
-  const startBattle = () => {
-    setBattleState('fighting');
-    setPlayerPet({ ...playerPet, hp: playerPet.maxHp });
-    setEnemyPet({ ...enemyPet, hp: enemyPet.maxHp });
-    setLogs(['⚔️ 战斗开始！']);
   };
 
   if (!isConnected) {
@@ -97,17 +113,17 @@ export default function Battle() {
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center gap-2">
             <span className="text-2xl">🦞</span>
-            <span className="text-xl font-bold text-white">MythicPets</span>
+            <span className="text-xl font-bold text-white">Lobster Ranch</span>
           </Link>
           <nav className="flex gap-4 ml-8">
             <Link href="/dashboard" className="text-slate-400 hover:text-white">
-              {t('dashboard')}
+              {t('nav.dashboard')}
             </Link>
             <Link href="/battle" className="text-indigo-400 hover:text-indigo-300">
-              {t('battle')}
+              {t('nav.battle')}
             </Link>
             <Link href="/breed" className="text-slate-400 hover:text-white">
-              {t('breed')}
+              {t('nav.breed')}
             </Link>
           </nav>
         </div>
@@ -119,12 +135,35 @@ export default function Battle() {
 
       {/* Battle Arena */}
       <main className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-white text-center mb-8">{t('battle.title')}</h1>
+        <h1 className="text-3xl font-bold text-white text-center mb-8">🌊 战斗竞技场 🌊</h1>
+
+        {/* Battle Effects Overlay */}
+        {attackEffect !== 'none' && (
+          <div className="fixed inset-0 pointer-events-none z-50 flex items-center justify-center">
+            <div className={`text-9xl animate-ping ${attackEffect === 'special' ? 'text-red-500' : 'text-yellow-400'}`}>
+              {attackEffect === 'special' ? '💥' : '⚡'}
+            </div>
+          </div>
+        )}
+
+        {/* Victory/Defeat Effects */}
+        {battleState === 'victory' && (
+          <div className="fixed inset-0 pointer-events-none z-40 flex items-center justify-center">
+            <div className="text-9xl animate-bounce">🏆</div>
+            <div className="absolute inset-0 bg-yellow-500/20 animate-pulse" />
+          </div>
+        )}
+        {battleState === 'defeat' && (
+          <div className="fixed inset-0 pointer-events-none z-40 flex items-center justify-center">
+            <div className="text-9xl animate-pulse">💀</div>
+            <div className="absolute inset-0 bg-red-500/20" />
+          </div>
+        )}
 
         <div className="flex justify-around items-center mb-12">
           {/* Player Pet */}
-          <div className="text-center">
-            <div className="text-8xl mb-4">{playerPet.image}</div>
+          <div className={`text-center transition-transform ${shake ? 'translate-x-2' : ''}`}>
+            <div className="text-8xl mb-4 animate-pulse">{playerPet.image}</div>
             <h3 className="text-xl font-bold text-white mb-2">{playerPet.name}</h3>
             <p className="text-slate-400 mb-2">Lv.{playerPet.level}</p>
             <div className="w-48 h-4 bg-slate-700 rounded-full overflow-hidden">
@@ -136,11 +175,11 @@ export default function Battle() {
             <p className="text-green-400 mt-1">{playerPet.hp}/{playerPet.maxHp} HP</p>
           </div>
 
-          <div className="text-4xl">VS</div>
+          <div className="text-4xl font-bold text-slate-500">VS</div>
 
           {/* Enemy Pet */}
-          <div className="text-center">
-            <div className="text-8xl mb-4">{enemyPet.image}</div>
+          <div className={`text-center transition-transform ${shake ? '-translate-x-2' : ''}`}>
+            <div className={`text-8xl mb-4 ${attackEffect !== 'none' ? 'animate-spin' : ''}`}>{enemyPet.image}</div>
             <h3 className="text-xl font-bold text-white mb-2">{enemyPet.name}</h3>
             <p className="text-slate-400 mb-2">Lv.{enemyPet.level}</p>
             <div className="w-48 h-4 bg-slate-700 rounded-full overflow-hidden">
@@ -158,9 +197,9 @@ export default function Battle() {
           <div className="text-center">
             <button
               onClick={startBattle}
-              className="px-8 py-4 bg-gradient-to-r from-red-600 to-orange-600 rounded-full text-xl font-semibold hover:from-red-500 hover:to-orange-500 transition-all transform hover:scale-105"
+              className="px-8 py-4 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-full text-xl font-semibold hover:from-blue-500 hover:to-cyan-500 transition-all transform hover:scale-105"
             >
-              ⚔️ {t('battle.startBattle')}
+              ⚔️ 开始战斗
             </button>
           </div>
         )}
@@ -169,42 +208,50 @@ export default function Battle() {
           <div className="flex justify-center gap-4">
             <button
               onClick={() => attack(false)}
-              className="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-xl text-lg font-medium transition-colors"
+              className="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-xl text-lg font-medium transition-all hover:scale-105"
             >
-              🗡️ {t('battle.attack')}
+              ⚔️ {t('battle.attack')}
             </button>
             <button
               onClick={() => attack(true)}
-              className="px-8 py-4 bg-purple-600 hover:bg-purple-500 rounded-xl text-lg font-medium transition-colors"
+              className="px-8 py-4 bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 rounded-xl text-lg font-medium transition-all hover:scale-105 animate-pulse"
             >
-              ✨ {t('battle.special')}
+              🔥 {t('battle.special')}
             </button>
           </div>
         )}
 
         {battleState === 'victory' && (
           <div className="text-center">
-            <div className="text-6xl mb-4">🏆</div>
-            <h2 className="text-4xl font-bold text-amber-400 mb-4">{t('battle.victory')}</h2>
-            <p className="text-xl text-indigo-400 mb-6">+100 EXP, +10 $MYTH</p>
-            <button
-              onClick={startBattle}
-              className="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-xl text-lg font-medium"
-            >
-              再战
-            </button>
+            <div className="text-8xl mb-4 animate-bounce">🎉</div>
+            <h2 className="text-5xl font-bold text-yellow-400 mb-4">{t('battle.victory')}</h2>
+            <p className="text-2xl text-indigo-400 mb-6">+100 EXP, +10 $MYTH</p>
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={startBattle}
+                className="px-8 py-4 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 rounded-xl text-lg font-medium"
+              >
+                再战 🐠
+              </button>
+              <Link
+                href="/dashboard"
+                className="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-xl text-lg font-medium"
+              >
+                返回 🏠
+              </Link>
+            </div>
           </div>
         )}
 
         {battleState === 'defeat' && (
           <div className="text-center">
-            <div className="text-6xl mb-4">💀</div>
-            <h2 className="text-4xl font-bold text-red-400 mb-4">{t('battle.defeat')}</h2>
+            <div className="text-8xl mb-4 animate-pulse">💔</div>
+            <h2 className="text-5xl font-bold text-red-400 mb-4">{t('battle.defeat')}</h2>
             <button
               onClick={startBattle}
-              className="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-xl text-lg font-medium"
+              className="px-8 py-4 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 rounded-xl text-lg font-medium"
             >
-              再来一次
+              重新挑战 💪
             </button>
           </div>
         )}
@@ -212,7 +259,7 @@ export default function Battle() {
         {/* Battle Logs */}
         {logs.length > 0 && (
           <div className="mt-12 max-w-xl mx-auto">
-            <h3 className="text-lg font-bold text-white mb-4">战斗记录</h3>
+            <h3 className="text-lg font-bold text-white mb-4">📜 战斗记录</h3>
             <div className="bg-slate-800 rounded-xl p-4 h-48 overflow-y-auto space-y-2">
               {logs.map((log, i) => (
                 <p key={i} className="text-slate-300 text-sm">{log}</p>
