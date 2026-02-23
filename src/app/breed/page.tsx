@@ -6,6 +6,7 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
 import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import { playBreedSound } from '@/lib/sounds';
 
 type Element = 'gold' | 'wood' | 'water' | 'fire' | 'earth';
 type Gender = 'male' | 'female';
@@ -56,6 +57,7 @@ export default function Breed() {
     
     // Simulate breeding
     setTimeout(() => {
+      playBreedSound();
       const elements: Element[] = ['gold', 'wood', 'water', 'fire', 'earth'];
       const genders: Gender[] = ['male', 'female'];
       const rarities = ['common', 'rare', 'epic', 'legendary'];
