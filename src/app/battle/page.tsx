@@ -6,7 +6,7 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
 import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
-import { playAttackSound, playVictorySound, playDefeatSound } from '@/lib/sounds';
+import { playAttackSound, playVictorySound, playDefeatSound, startBattleMusic, stopBattleMusic } from '@/lib/sounds';
 
 type Element = 'gold' | 'wood' | 'water' | 'fire' | 'earth';
 type Gender = 'male' | 'female';
@@ -66,6 +66,7 @@ export default function Battle() {
     setPlayerPet({ ...playerPet, hp: playerPet.maxHp });
     setEnemyPet({ ...randomEnemy, hp: randomEnemy.maxHp });
     setLogs(['⚔️ 战斗开始！']);
+    startBattleMusic();
   };
 
   const attack = (isSpecial: boolean) => {
@@ -92,6 +93,7 @@ export default function Battle() {
 
     if (newEnemyHp <= 0) {
       setBattleState('victory');
+      stopBattleMusic();
       playVictorySound();
       setLogs(prev => [...prev, `🎉 胜利！${enemyPet.name}被击败了！`, '🏆 获得 100 经验和 10 $MYTH']);
     } else {
@@ -107,6 +109,7 @@ export default function Battle() {
         
         if (newPlayerHp <= 0) {
           setBattleState('defeat');
+          stopBattleMusic();
           playDefeatSound();
           setLogs(prev => [...prev, '💀 失败！你的龙虾倒下了...', '再接再厉，下次一定能赢！']);
         }

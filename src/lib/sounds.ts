@@ -13,12 +13,86 @@ const sounds: Record<SoundType, string> = {
 };
 
 let audioContext: AudioContext | null = null;
+let backgroundMusicSource: AudioBufferSourceNode | null = null;
+let backgroundMusicGain: GainNode | null = null;
+let isMusicPlaying = false;
 
 function getAudioContext(): AudioContext {
   if (!audioContext) {
     audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
   }
   return audioContext;
+}
+
+// 生成战斗背景音乐
+function generateBattleMusic(): AudioBuffer {
+  const ctx = getAudioContext();
+  const sampleRate = ctx.sampleRate;
+  const duration = 8; // 8秒循环
+  const buffer = ctx.createBuffer(2, sampleRate * duration, sampleRate);
+  
+  for (let channel = 0; channel < 2; channel++) {
+    const data = buffer.getChannelData(channel);
+    
+    for (let i = 0; i < data.length; i++) {
+      const t = i / sampleRate;
+      const beat = Math.floor(t * 2) / 2; // 每半秒一拍
+      
+      // 底鼓节奏
+      const kick = Math.sin(2 * Math.PI * 60 * (t - beat)) * Math.exp(-(t - beat) * 20) * 0.3;
+      
+      // 简单的旋律
+      const notes = [261.63, 293.66, 329.63, 349.23, 392.00, 329.63, 293.66, 261.63]; // C4 scale
+      const melody = Math.sin(2 * Math.PI * notes[Math.floor(t * 0.5) % notes.length] * t) * 0.1;
+      
+      // 整体节奏感
+      const rhythm = Math.sin(2 * Math.PI * 2 * t) * 0.05;
+      
+      data[i] = kick + melody + rhythm;
+    }
+  }
+  
+  return buffer;
+}
+
+export function startBattleMusic(): void {
+  if (isMusicPlaying) return;
+  
+  try {
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+    
+    const buffer = generateBattleMusic();
+    backgroundMusicSource = ctx.createBufferSource();
+    backgroundMusicSource.buffer = buffer;
+    backgroundMusicSource.loop = true;
+    
+    backgroundMusicGain = ctx.createGain();
+    backgroundMusicGain.gain.value = 0.15;
+    
+    backgroundMusicSource.connect(backgroundMusicGain);
+    backgroundMusicGain.connect(ctx.destination);
+    backgroundMusicSource.start(0);
+    isMusicPlaying = true;
+  } catch (e) {
+    console.log('Background music not available');
+  }
+}
+
+export function stopBattleMusic(): void {
+  if (!isMusicPlaying) return;
+  
+  try {
+    if (backgroundMusicSource) {
+      backgroundMusicSource.stop();
+      backgroundMusicSource = null;
+    }
+    isMusicPlaying = false;
+  } catch (e) {
+    console.log('Error stopping music');
+  }
 }
 
 // 生成简单的音效
