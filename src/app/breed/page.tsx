@@ -83,12 +83,32 @@ export default function Breed() {
     const inheritedElement = Math.random() > 0.5 ? parent1.element : parent2.element;
     const newElement = Math.random() > 0.3 ? inheritedElement : elements[Math.floor(Math.random() * elements.length)];
     
-    setResult({
+    const newPet = {
       element: newElement,
       gender: genders[Math.floor(Math.random() * genders.length)],
       rarity: rarities[Math.floor(Math.random() * rarities.length)],
-      name: `小龙龙${Math.floor(Math.random() * 100)}`
+      name: `小龙龙${Math.floor(Math.random() * 100)}`,
+      level: 1,
+      exp: 0,
+      maxExp: 100,
+      attack: 15 + Math.floor(Math.random() * 10),
+      defense: 10 + Math.floor(Math.random() * 8),
+      hp: 45 + Math.floor(Math.random() * 15),
+      maxHp: 45 + Math.floor(Math.random() * 15),
+    };
+    
+    setResult({
+      element: newPet.element,
+      gender: newPet.gender,
+      rarity: newPet.rarity,
+      name: newPet.name
     });
+    
+    // 保存到 localStorage
+    const existingPets = JSON.parse(localStorage.getItem('myPets') || '[]');
+    const newPetWithId = { ...newPet, id: Date.now() };
+    localStorage.setItem('myPets', JSON.stringify([...existingPets, newPetWithId]));
+    
     setBreeding(false);
     setBreedStartTime(null);
     setElapsedTime(0);

@@ -45,36 +45,45 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (isConnected) {
-      setPets([
-        {
-          id: 1,
-          name: '小火龙',
-          element: 'fire',
-          gender: 'male',
-          level: 1,
-          exp: 0,
-          maxExp: 100,
-          attack: 20,
-          defense: 10,
-          hp: 50,
-          maxHp: 50,
-          rarity: 'common'
-        },
-        {
-          id: 2,
-          name: '小水龙',
-          element: 'water',
-          gender: 'female',
-          level: 1,
-          exp: 0,
-          maxExp: 100,
-          attack: 18,
-          defense: 12,
-          hp: 55,
-          maxHp: 55,
-          rarity: 'common'
-        }
-      ]);
+      // 先检查 localStorage
+      const savedPets = localStorage.getItem('myPets');
+      if (savedPets) {
+        setPets(JSON.parse(savedPets));
+      } else {
+        // 创世宠物：一公一母
+        const starterPets = [
+          {
+            id: 1,
+            name: '小火龙',
+            element: 'fire' as Element,
+            gender: 'male' as Gender,
+            level: 1,
+            exp: 0,
+            maxExp: 100,
+            attack: 20,
+            defense: 10,
+            hp: 50,
+            maxHp: 50,
+            rarity: 'common'
+          },
+          {
+            id: 2,
+            name: '小水龙',
+            element: 'water' as Element,
+            gender: 'female' as Gender,
+            level: 1,
+            exp: 0,
+            maxExp: 100,
+            attack: 18,
+            defense: 12,
+            hp: 55,
+            maxHp: 55,
+            rarity: 'common'
+          }
+        ];
+        setPets(starterPets);
+        localStorage.setItem('myPets', JSON.stringify(starterPets));
+      }
     }
   }, [isConnected]);
 
