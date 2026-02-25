@@ -1,15 +1,17 @@
+import { getScopedStorageKey } from '@/lib/auth';
+
 export const BATTLE_COOLDOWN_MS = 10 * 60 * 1000;
 
-export function getBattleCooldownKey(petId?: number): string {
-  return `mythicpets-battle-cooldown:${petId ?? 'default'}`;
+export function getBattleCooldownKey(petId?: number, profileKey?: string): string {
+  return getScopedStorageKey(`mythicpets-battle-cooldown:${petId ?? 'default'}`, profileKey);
 }
 
-export function readBattleCooldownUntil(petId?: number): number | null {
+export function readBattleCooldownUntil(petId?: number, profileKey?: string): number | null {
   if (typeof window === 'undefined') {
     return null;
   }
 
-  const key = getBattleCooldownKey(petId);
+  const key = getBattleCooldownKey(petId, profileKey);
   const raw = localStorage.getItem(key);
   if (!raw) {
     return null;
@@ -29,26 +31,26 @@ export function readBattleCooldownUntil(petId?: number): number | null {
   return until;
 }
 
-export function getBattleCooldownRemainingMs(petId?: number, now = Date.now()): number {
-  const until = readBattleCooldownUntil(petId);
+export function getBattleCooldownRemainingMs(petId?: number, now = Date.now(), profileKey?: string): number {
+  const until = readBattleCooldownUntil(petId, profileKey);
   if (!until) {
     return 0;
   }
   return Math.max(0, until - now);
 }
 
-export function setBattleCooldownUntil(until: number, petId?: number): void {
+export function setBattleCooldownUntil(until: number, petId?: number, profileKey?: string): void {
   if (typeof window === 'undefined') {
     return;
   }
-  localStorage.setItem(getBattleCooldownKey(petId), String(until));
+  localStorage.setItem(getBattleCooldownKey(petId, profileKey), String(until));
 }
 
-export function clearBattleCooldown(petId?: number): void {
+export function clearBattleCooldown(petId?: number, profileKey?: string): void {
   if (typeof window === 'undefined') {
     return;
   }
-  localStorage.removeItem(getBattleCooldownKey(petId));
+  localStorage.removeItem(getBattleCooldownKey(petId, profileKey));
 }
 
 export function formatCooldownTimer(ms: number): string {

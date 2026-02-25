@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount } from 'wagmi';
 import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import AuthStatus from '@/components/AuthStatus';
+import RequireAuth from '@/components/RequireAuth';
+import { useAuth } from '@/components/AuthProvider';
+import { getScopedStorageKey } from '@/lib/auth';
 import { localizePetName } from '@/lib/petNames';
 import { formatCooldownTimer } from '@/lib/battleCooldown';
 import {
@@ -33,6 +35,12 @@ interface Pet {
   element: Element[];
   gender: Gender;
   level: number;
+  attack: number;
+  defense: number;
+  hp: number;
+  maxHp: number;
+  mp: number;
+  maxMp: number;
   generation?: number;
 }
 
@@ -48,7 +56,7 @@ const elementIcons: Record<Element, string> = {
 
 export default function GatherPage() {
   const { t } = useTranslation();
-  const { isConnected } = useAccount();
+  const { ready, isAuthenticated, username } = useAuth();
   const [pets, setPets] = useState<Pet[]>([]);
   const [selectedPetId, setSelectedPetId] = useState<number | null>(null);
   const [task, setTask] = useState<GatherTask | null>(null);
@@ -72,12 +80,12 @@ export default function GatherPage() {
   }, []);
 
   useEffect(() => {
-    if (!isConnected) {
+    if (!isAuthenticated || !username) {
       return;
     }
 
     try {
-      const rawPets = localStorage.getItem('myPets');
+      const rawPets = localStorage.getItem(getScopedStorageKey('myPets', username || undefined));
       if (rawPets) {
         const parsed = JSON.parse(rawPets);
         if (Array.isArray(parsed)) {
@@ -85,6 +93,22 @@ export default function GatherPage() {
             ...pet,
             element: normalizeElements(pet.element),
             level: typeof pet.level === 'number' && pet.level > 0 ? pet.level : 1,
+            attack: typeof pet.attack === 'number' && pet.attack > 0 ? pet.attack : 15,
+            defense: typeof pet.defense === 'number' && pet.defense > 0 ? pet.defense : 10,
+            hp: typeof pet.hp === 'number' && pet.hp > 0 ? pet.hp : 50,
+            maxHp:
+              typeof pet.maxHp === 'number' && pet.maxHp > 0
+                ? pet.maxHp
+                : typeof pet.hp === 'number' && pet.hp > 0
+                  ? pet.hp
+                  : 50,
+            mp: typeof pet.mp === 'number' && pet.mp >= 0 ? pet.mp : 35,
+            maxMp:
+              typeof pet.maxMp === 'number' && pet.maxMp > 0
+                ? pet.maxMp
+                : typeof pet.mp === 'number' && pet.mp > 0
+                  ? pet.mp
+                  : 35,
           })) as Pet[];
           setPets(normalizedPets);
           if (!selectedPetId && normalizedPets.length > 0) {
@@ -96,13 +120,17 @@ export default function GatherPage() {
       // Ignore invalid local data.
     }
 
-    setPotionCount(readMagicPotionCount());
-    setTask(readGatherTask());
-  }, [isConnected, selectedPetId]);
+    setPotionCount(readMagicPotionCount(username));
+    setTask(readGatherTask(username));
+  }, [isAuthenticated, selectedPetId, username]);
 
   const selectedPet = useMemo(
     () => pets.find((pet) => pet.id === selectedPetId) || null,
     [pets, selectedPetId],
+  );
+  const activeTaskPet = useMemo(
+    () => (task ? pets.find((pet) => pet.id === task.petId) || null : null),
+    [pets, task],
   );
 
   const remainingMs = task ? Math.max(0, task.endsAt - nowMs) : 0;
@@ -126,6 +154,9 @@ export default function GatherPage() {
   }, [isTaskReady, readySoundPlayed, task]);
 
   const handleStartGather = () => {
+    if (!username) {
+      return;
+    }
     if (!selectedPet || task) {
       return;
     }
@@ -137,34 +168,34 @@ export default function GatherPage() {
       startedAt,
       endsAt: startedAt + GATHER_DURATION_MS,
     };
-    writeGatherTask(nextTask);
+    writeGatherTask(nextTask, username);
     setTask(nextTask);
     playGatherStartSound();
     startGatherAmbience();
   };
 
   const handleClaimPotion = () => {
+    if (!username) {
+      return;
+    }
     if (!task || !isTaskReady) {
       return;
     }
 
-    const nextCount = addMagicPotion(1);
+    const nextCount = addMagicPotion(1, username);
     setPotionCount(nextCount);
-    clearGatherTask();
+    clearGatherTask(username);
     setTask(null);
     setReadySoundPlayed(false);
     stopGatherAmbience();
   };
 
-  if (!isConnected) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl text-white mb-4">{t('gather.connectWallet')}</h2>
-          <ConnectButton />
-        </div>
-      </div>
-    );
+  if (!ready) {
+    return <div className="min-h-screen bg-slate-900" />;
+  }
+
+  if (!isAuthenticated) {
+    return <RequireAuth title={t('auth.loginRequired')} />;
   }
 
   return (
@@ -208,7 +239,7 @@ export default function GatherPage() {
         </div>
         <div className="flex items-center gap-4">
           <LanguageSwitcher />
-          <ConnectButton />
+          <AuthStatus />
         </div>
       </header>
 
@@ -252,9 +283,19 @@ export default function GatherPage() {
                         </span>
                       </div>
                       <div className="text-xs text-slate-300 mt-2">
-                        {pet.element.map((element) => elementIcons[element]).join(' ')} • {t('dashboard.pet.level')}{' '}
-                        {pet.level}
-                        {pet.generation ? ` • ${t('breed.generation', { gen: pet.generation })}` : ''}
+                        <div>
+                          {pet.element.map((element) => elementIcons[element]).join(' ')} • {t('dashboard.pet.level')}{' '}
+                          {pet.level}
+                        </div>
+                        <div className="text-slate-400 mt-1">
+                          {pet.attack}⚔️ {pet.defense}🛡️ • {t('dashboard.pet.hp')} {pet.hp}/{pet.maxHp}
+                        </div>
+                        <div className="text-slate-400 mt-1">
+                          {t('dashboard.pet.mp')} {pet.mp}/{pet.maxMp}
+                        </div>
+                        {pet.generation && (
+                          <div className="text-slate-400 mt-1">{t('breed.generation', { gen: pet.generation })}</div>
+                        )}
                       </div>
                     </button>
                   ))}
@@ -285,6 +326,24 @@ export default function GatherPage() {
                 <p className="text-slate-300 mb-4">
                   {t('gather.activePet', { name: localizePetName(task.petName, t) || `#${task.petId}` })}
                 </p>
+                {activeTaskPet && (
+                  <div className="text-xs text-slate-300 mb-4 space-y-1">
+                    <p>
+                      {activeTaskPet.gender === 'male'
+                        ? `♂ ${t('dashboard.gender.male')}`
+                        : `♀ ${t('dashboard.gender.female')}`}{' '}
+                      • {activeTaskPet.element.map((element) => t(`dashboard.element.${element}`)).join('/')}
+                    </p>
+                    <p>
+                      {t('dashboard.pet.level')} {activeTaskPet.level} • {activeTaskPet.attack}⚔️ {activeTaskPet.defense}
+                      🛡️
+                    </p>
+                    <p>
+                      {t('dashboard.pet.hp')} {activeTaskPet.hp}/{activeTaskPet.maxHp} • {t('dashboard.pet.mp')}{' '}
+                      {activeTaskPet.mp}/{activeTaskPet.maxMp}
+                    </p>
+                  </div>
+                )}
 
                 {isTaskReady ? (
                   <button

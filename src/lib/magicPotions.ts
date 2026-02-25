@@ -1,3 +1,5 @@
+import { getScopedStorageKey } from '@/lib/auth';
+
 export const MAGIC_POTION_COUNT_KEY = 'mythicpets-magic-potions';
 export const GATHER_TASK_KEY = 'mythicpets-gather-task';
 export const GATHER_DURATION_MS = 60 * 60 * 1000;
@@ -13,52 +15,58 @@ function hasWindow(): boolean {
   return typeof window !== 'undefined';
 }
 
-export function readMagicPotionCount(): number {
+function scopedKey(base: string, profileKey?: string): string {
+  return getScopedStorageKey(base, profileKey);
+}
+
+export function readMagicPotionCount(profileKey?: string): number {
   if (!hasWindow()) {
     return 0;
   }
 
-  const raw = localStorage.getItem(MAGIC_POTION_COUNT_KEY);
+  const key = scopedKey(MAGIC_POTION_COUNT_KEY, profileKey);
+  const raw = localStorage.getItem(key);
   if (!raw) {
     return 0;
   }
 
   const parsed = Number.parseInt(raw, 10);
   if (Number.isNaN(parsed) || parsed < 0) {
-    localStorage.removeItem(MAGIC_POTION_COUNT_KEY);
+    localStorage.removeItem(key);
     return 0;
   }
 
   return parsed;
 }
 
-export function writeMagicPotionCount(count: number): void {
+export function writeMagicPotionCount(count: number, profileKey?: string): void {
   if (!hasWindow()) {
     return;
   }
-  localStorage.setItem(MAGIC_POTION_COUNT_KEY, String(Math.max(0, Math.floor(count))));
+  localStorage.setItem(scopedKey(MAGIC_POTION_COUNT_KEY, profileKey), String(Math.max(0, Math.floor(count))));
 }
 
-export function addMagicPotion(count = 1): number {
-  const current = readMagicPotionCount();
+export function addMagicPotion(count = 1, profileKey?: string): number {
+  const current = readMagicPotionCount(profileKey);
   const next = current + Math.max(1, Math.floor(count));
-  writeMagicPotionCount(next);
+  writeMagicPotionCount(next, profileKey);
   return next;
 }
 
-export function consumeMagicPotion(count = 1): number {
-  const current = readMagicPotionCount();
+export function consumeMagicPotion(count = 1, profileKey?: string): number {
+  const current = readMagicPotionCount(profileKey);
   const next = Math.max(0, current - Math.max(1, Math.floor(count)));
-  writeMagicPotionCount(next);
+  writeMagicPotionCount(next, profileKey);
   return next;
 }
 
-export function readGatherTask(): GatherTask | null {
+export function readGatherTask(profileKey?: string): GatherTask | null {
   if (!hasWindow()) {
     return null;
   }
 
-  const raw = localStorage.getItem(GATHER_TASK_KEY);
+  const key = scopedKey(GATHER_TASK_KEY, profileKey);
+  const raw = localStorage.getItem(key);
   if (!raw) {
     return null;
   }
@@ -76,29 +84,29 @@ export function readGatherTask(): GatherTask | null {
     // fall through to cleanup
   }
 
-  localStorage.removeItem(GATHER_TASK_KEY);
+  localStorage.removeItem(key);
   return null;
 }
 
-export function writeGatherTask(task: GatherTask): void {
+export function writeGatherTask(task: GatherTask, profileKey?: string): void {
   if (!hasWindow()) {
     return;
   }
-  localStorage.setItem(GATHER_TASK_KEY, JSON.stringify(task));
+  localStorage.setItem(scopedKey(GATHER_TASK_KEY, profileKey), JSON.stringify(task));
 }
 
-export function clearGatherTask(): void {
+export function clearGatherTask(profileKey?: string): void {
   if (!hasWindow()) {
     return;
   }
-  localStorage.removeItem(GATHER_TASK_KEY);
+  localStorage.removeItem(scopedKey(GATHER_TASK_KEY, profileKey));
 }
 
 export function isGatherTaskActive(task: GatherTask | null | undefined, now = Date.now()): boolean {
   return Boolean(task && task.endsAt > now);
 }
 
-export function readActiveGatherTask(now = Date.now()): GatherTask | null {
-  const task = readGatherTask();
+export function readActiveGatherTask(now = Date.now(), profileKey?: string): GatherTask | null {
+  const task = readGatherTask(profileKey);
   return isGatherTaskActive(task, now) ? task : null;
 }

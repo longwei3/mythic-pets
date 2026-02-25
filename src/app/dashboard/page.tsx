@@ -2,13 +2,21 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount } from 'wagmi';
 import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import AuthStatus from '@/components/AuthStatus';
+import RequireAuth from '@/components/RequireAuth';
+import { useAuth } from '@/components/AuthProvider';
+import { getScopedStorageKey } from '@/lib/auth';
 import { localizePetName } from '@/lib/petNames';
 import { formatCooldownTimer, getBattleCooldownRemainingMs } from '@/lib/battleCooldown';
 import { consumeMagicPotion, readGatherTask, readMagicPotionCount, type GatherTask } from '@/lib/magicPotions';
+import {
+  DAILY_CHECKIN_REWARD,
+  claimDailyCheckIn,
+  hasClaimedDailyCheckIn,
+  readMythBalance,
+} from '@/lib/economy';
 import { normalizePetRarity, type PetRarity } from '@/lib/petRarity';
 
 type Element = 'gold' | 'wood' | 'water' | 'fire' | 'earth';
@@ -93,29 +101,34 @@ function normalizePet(rawPet: any): Pet {
 
 export default function Dashboard() {
   const { t } = useTranslation();
-  const { isConnected } = useAccount();
+  const { ready, isAuthenticated, username } = useAuth();
   const [pets, setPets] = useState<Pet[]>([]);
   const [nowMs, setNowMs] = useState(Date.now());
   const [potionCount, setPotionCount] = useState(0);
   const [gatherTask, setGatherTask] = useState<GatherTask | null>(null);
+  const [mythBalance, setMythBalance] = useState(0);
+  const [dailyClaimed, setDailyClaimed] = useState(true);
+  const [checkInNotice, setCheckInNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isConnected) {
+    if (!isAuthenticated || !username) {
       return;
     }
 
-    const savedPets = localStorage.getItem('myPets');
-    const generation1Count = Number.parseInt(localStorage.getItem('generation1Count') || '0', 10);
+    const myPetsKey = getScopedStorageKey('myPets', username);
+    const generationKey = getScopedStorageKey('generation1Count', username);
+    const savedPets = localStorage.getItem(myPetsKey);
+    const generation1Count = Number.parseInt(localStorage.getItem(generationKey) || '0', 10);
 
     if (savedPets) {
       try {
         const parsed = JSON.parse(savedPets);
         const migratedPets = Array.isArray(parsed) ? parsed.map((pet) => normalizePet(pet)) : [];
         setPets(migratedPets);
-        localStorage.setItem('myPets', JSON.stringify(migratedPets));
+        localStorage.setItem(myPetsKey, JSON.stringify(migratedPets));
       } catch {
-        localStorage.removeItem('myPets');
-        localStorage.removeItem('generation1Count');
+        localStorage.removeItem(myPetsKey);
+        localStorage.removeItem(generationKey);
       }
     } else {
       if (generation1Count >= 200) {
@@ -161,26 +174,38 @@ export default function Dashboard() {
       ];
 
       setPets(starterPets);
-      localStorage.setItem('myPets', JSON.stringify(starterPets));
-      localStorage.setItem('generation1Count', String(generation1Count + 1));
+      localStorage.setItem(myPetsKey, JSON.stringify(starterPets));
+      localStorage.setItem(generationKey, String(generation1Count + 1));
     }
 
-    setPotionCount(readMagicPotionCount());
-    setGatherTask(readGatherTask());
-  }, [isConnected, t]);
+    setPotionCount(readMagicPotionCount(username));
+    setGatherTask(readGatherTask(username));
+    setMythBalance(readMythBalance(username));
+    setDailyClaimed(hasClaimedDailyCheckIn(username));
+  }, [isAuthenticated, t, username]);
 
   useEffect(() => {
-    if (!isConnected) {
+    if (!isAuthenticated || !username) {
       return;
     }
 
     const timer = setInterval(() => {
       setNowMs(Date.now());
-      setGatherTask(readGatherTask());
-      setPotionCount(readMagicPotionCount());
+      setGatherTask(readGatherTask(username));
+      setPotionCount(readMagicPotionCount(username));
+      setMythBalance(readMythBalance(username));
+      setDailyClaimed(hasClaimedDailyCheckIn(username));
     }, 1000);
     return () => clearInterval(timer);
-  }, [isConnected]);
+  }, [isAuthenticated, username]);
+
+  useEffect(() => {
+    if (!checkInNotice) {
+      return;
+    }
+    const timer = setTimeout(() => setCheckInNotice(null), 2800);
+    return () => clearTimeout(timer);
+  }, [checkInNotice]);
 
   const gatherPetStatus = useMemo<'idle' | 'gathering' | 'ready'>(() => {
     if (!gatherTask) {
@@ -197,6 +222,9 @@ export default function Dashboard() {
   }, [gatherTask]);
 
   const handleUsePotion = (petId: number) => {
+    if (!username) {
+      return;
+    }
     if (potionCount <= 0 || (gatherPetStatus === 'gathering' && gatherPetId === petId)) {
       return;
     }
@@ -208,20 +236,33 @@ export default function Dashboard() {
 
     const updatedPets = pets.map((pet) => (pet.id === petId ? { ...pet, mp: pet.maxMp } : pet));
     setPets(updatedPets);
-    localStorage.setItem('myPets', JSON.stringify(updatedPets));
-    const nextPotionCount = consumeMagicPotion(1);
+    localStorage.setItem(getScopedStorageKey('myPets', username || undefined), JSON.stringify(updatedPets));
+    const nextPotionCount = consumeMagicPotion(1, username);
     setPotionCount(nextPotionCount);
   };
 
-  if (!isConnected) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl text-white mb-4">{t('battle.reconnect')}</h2>
-          <ConnectButton />
-        </div>
-      </div>
-    );
+  const handleDailyCheckIn = () => {
+    if (!username) {
+      return;
+    }
+    if (dailyClaimed) {
+      return;
+    }
+
+    const result = claimDailyCheckIn(username);
+    setMythBalance(result.balance);
+    setDailyClaimed(hasClaimedDailyCheckIn(username));
+    if (result.claimed) {
+      setCheckInNotice(t('dashboard.dailyClaimSuccess', { amount: result.amount }));
+    }
+  };
+
+  if (!ready) {
+    return <div className="min-h-screen bg-slate-900" />;
+  }
+
+  if (!isAuthenticated) {
+    return <RequireAuth title={t('auth.loginRequired')} />;
   }
 
   return (
@@ -252,7 +293,7 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-4">
           <LanguageSwitcher />
-          <ConnectButton />
+          <AuthStatus />
         </div>
       </header>
 
@@ -263,9 +304,28 @@ export default function Dashboard() {
           <span className="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 text-sm">
             🧪 {t('dashboard.magicPotions', { count: potionCount })}
           </span>
+          <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-sm">
+            💰 {t('dashboard.mythBalance', { amount: mythBalance })}
+          </span>
+          <button
+            onClick={handleDailyCheckIn}
+            disabled={dailyClaimed}
+            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+              dailyClaimed
+                ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                : 'bg-amber-600 hover:bg-amber-500 text-white'
+            }`}
+          >
+            {dailyClaimed
+              ? `✅ ${t('dashboard.dailyClaimed')}`
+              : `🎁 ${t('dashboard.dailyCheckIn', { amount: DAILY_CHECKIN_REWARD })}`}
+          </button>
           <Link href="/gather" className="px-3 py-1 rounded-full bg-blue-600 hover:bg-blue-500 text-sm font-medium">
             🌊 {t('dashboard.goGather')}
           </Link>
+          {checkInNotice && (
+            <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-sm">{checkInNotice}</span>
+          )}
           {gatherTask && gatherPetId && gatherPetStatus === 'gathering' && (
             <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-sm">
               {t('gather.syncHint', {

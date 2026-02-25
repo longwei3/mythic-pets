@@ -2,10 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount } from 'wagmi';
 import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import AuthStatus from '@/components/AuthStatus';
+import RequireAuth from '@/components/RequireAuth';
+import { useAuth } from '@/components/AuthProvider';
+import { getScopedStorageKey } from '@/lib/auth';
+import { readMythBalance, spendMyth } from '@/lib/economy';
 import { playClickSound } from '@/lib/sounds';
 import { localizePetName } from '@/lib/petNames';
 import { normalizePetRarity, type PetRarity } from '@/lib/petRarity';
@@ -62,7 +65,7 @@ const marketPets: Pet[] = [
     maxHp: 200,
     rarity: 'legendary',
     generation: 2,
-    price: 0.05,
+    price: 180,
     forSale: true,
   },
   {
@@ -79,7 +82,7 @@ const marketPets: Pet[] = [
     maxHp: 180,
     rarity: 'epic',
     generation: 1,
-    price: 0.02,
+    price: 130,
     forSale: true,
   },
   {
@@ -96,7 +99,7 @@ const marketPets: Pet[] = [
     maxHp: 100,
     rarity: 'rare',
     generation: 1,
-    price: 0.01,
+    price: 90,
     forSale: true,
   },
   {
@@ -113,7 +116,7 @@ const marketPets: Pet[] = [
     maxHp: 80,
     rarity: 'common',
     generation: 1,
-    price: 0.005,
+    price: 60,
     forSale: true,
   },
   {
@@ -130,16 +133,17 @@ const marketPets: Pet[] = [
     maxHp: 120,
     rarity: 'rare',
     generation: 1,
-    price: 0.008,
+    price: 75,
     forSale: true,
   },
 ];
 
 export default function Market() {
   const { t } = useTranslation();
-  const { isConnected } = useAccount();
+  const { ready, isAuthenticated, username } = useAuth();
   const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy');
   const [myListedPets, setMyListedPets] = useState<Pet[]>([]);
+  const [mythBalance, setMythBalance] = useState(0);
 
   const normalizeElements = (element: Element | Element[] | undefined): Element[] => {
     const source = Array.isArray(element) ? element : [element];
@@ -152,23 +156,28 @@ export default function Market() {
   const getPrimaryElement = (pet: Pet): Element => normalizeElements(pet.element)[0];
 
   const readLocalPets = (key: string): Pet[] => {
+    const scopedKey = getScopedStorageKey(key, username || undefined);
     try {
-      const raw = localStorage.getItem(key);
+      const raw = localStorage.getItem(scopedKey);
       if (!raw) {
         return [];
       }
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) {
-        localStorage.removeItem(key);
+        localStorage.removeItem(scopedKey);
         return [];
       }
       return parsed.map((pet) => ({
         ...pet,
         element: normalizeElements((pet as Pet).element),
         rarity: normalizePetRarity((pet as Pet).rarity),
+        price:
+          typeof (pet as Pet).price === 'number'
+            ? Math.max(1, Math.floor((pet as Pet).price || 0))
+            : undefined,
       })) as Pet[];
     } catch {
-      localStorage.removeItem(key);
+      localStorage.removeItem(scopedKey);
       return [];
     }
   };
@@ -181,19 +190,72 @@ export default function Market() {
   };
 
   useEffect(() => {
-    if (isConnected) {
+    if (isAuthenticated && username) {
       setMyListedPets(readLocalPets('myListedPets'));
+      setMythBalance(readMythBalance(username));
     }
-  }, [isConnected]);
+  }, [isAuthenticated, username]);
 
   const handleBuy = (pet: Pet) => {
+    if (!username) {
+      return;
+    }
+
     playClickSound();
-    const price = pet.price ?? 0;
-    alert(
-      t('market.purchaseAlert', {
-        name: resolvePetName(pet),
+    const price = Math.max(1, Math.floor(pet.price ?? 0));
+    const name = resolvePetName(pet);
+
+    const confirmed = window.confirm(
+      t('market.purchaseConfirm', {
+        name,
         price,
-        confirm: t('common.confirm'),
+      }),
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    const result = spendMyth(price, 'market-purchase', username);
+    if (!result.success) {
+      alert(
+        t('market.notEnoughPoints', {
+          need: price,
+          balance: result.balance,
+        }),
+      );
+      return;
+    }
+
+    const myPets = readLocalPets('myPets');
+    const nextId = myPets.reduce((maxId, current) => Math.max(maxId, current.id), 0) + 1;
+    const elements = normalizeElements(pet.element);
+    const maxMp = Math.max(30, 20 + pet.level * 5);
+
+    const purchasedPet = {
+      id: nextId,
+      name,
+      element: elements,
+      gender: pet.gender,
+      level: pet.level,
+      exp: pet.exp,
+      maxExp: pet.maxExp,
+      attack: pet.attack,
+      defense: pet.defense,
+      hp: pet.maxHp,
+      maxHp: pet.maxHp,
+      mp: maxMp,
+      maxMp,
+      rarity: pet.rarity,
+      generation: pet.generation || 1,
+    };
+
+    localStorage.setItem(getScopedStorageKey('myPets', username), JSON.stringify([...myPets, purchasedPet]));
+    setMythBalance(result.balance);
+    alert(
+      t('market.purchaseSuccess', {
+        name,
+        cost: price,
+        balance: result.balance,
       }),
     );
   };
@@ -203,12 +265,17 @@ export default function Market() {
     const myPets = readLocalPets('myPets');
     const pet = myPets.find((p: Pet) => p.id === petId);
     if (pet) {
-      const priceInput = prompt(t('market.setPrice'), '0.01');
+      const priceInput = prompt(t('market.setPrice'), '100');
       if (priceInput) {
-        const listedPet = { ...pet, price: parseFloat(priceInput), forSale: true };
+        const parsedPrice = Number.parseInt(priceInput, 10);
+        if (Number.isNaN(parsedPrice) || parsedPrice <= 0) {
+          alert(t('market.invalidPrice'));
+          return;
+        }
+        const listedPet = { ...pet, price: parsedPrice, forSale: true };
         const newListed = [...myListedPets, listedPet];
         setMyListedPets(newListed);
-        localStorage.setItem('myListedPets', JSON.stringify(newListed));
+        localStorage.setItem(getScopedStorageKey('myListedPets', username || undefined), JSON.stringify(newListed));
         alert(t('market.listedSuccess', { name: resolvePetName(listedPet) || `#${listedPet.id}` }));
       }
     }
@@ -218,18 +285,15 @@ export default function Market() {
     playClickSound();
     const newListed = myListedPets.filter((p) => p.id !== petId);
     setMyListedPets(newListed);
-    localStorage.setItem('myListedPets', JSON.stringify(newListed));
+    localStorage.setItem(getScopedStorageKey('myListedPets', username || undefined), JSON.stringify(newListed));
   };
 
-  if (!isConnected) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl text-white mb-4">{t('market.connectWallet')}</h2>
-          <ConnectButton />
-        </div>
-      </div>
-    );
+  if (!ready) {
+    return <div className="min-h-screen bg-slate-900" />;
+  }
+
+  if (!isAuthenticated) {
+    return <RequireAuth title={t('auth.loginRequired')} />;
   }
 
   return (
@@ -260,12 +324,17 @@ export default function Market() {
         </div>
         <div className="flex items-center gap-4">
           <LanguageSwitcher />
-          <ConnectButton />
+          <AuthStatus />
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold text-white text-center mb-8">🏪 {t('market.title')}</h1>
+        <div className="flex justify-center mb-6">
+          <span className="px-4 py-2 rounded-full bg-amber-500/20 text-amber-300 text-sm font-medium">
+            💰 {t('market.pointsBalance', { amount: mythBalance })}
+          </span>
+        </div>
 
         <div className="flex justify-center gap-4 mb-8">
           <button
@@ -369,7 +438,9 @@ export default function Market() {
                     <div className="flex justify-between items-center pt-4 border-t border-slate-700">
                       <div>
                         <span className="text-xs text-slate-400">{t('market.price')}</span>
-                        <p className="text-xl font-bold text-green-400">Ξ {pet.price}</p>
+                        <p className="text-xl font-bold text-green-400">
+                          {pet.price} {t('market.pointsUnit')}
+                        </p>
                       </div>
                       <button
                         onClick={() => handleBuy(pet)}
@@ -395,17 +466,28 @@ export default function Market() {
                 <div className="grid md:grid-cols-3 gap-4">
                   {myListedPets.map((pet) => {
                     const primaryElement = getPrimaryElement(pet);
+                    const elementLabel = normalizeElements(pet.element)
+                      .map((element) => t(`dashboard.element.${element}`))
+                      .join('/');
                     return (
                       <div key={pet.id} className="bg-slate-800 rounded-xl p-4 border border-indigo-500">
                         <div className="flex justify-between items-center">
                           <div className="flex items-center gap-2">
                             <span>{elementColors[primaryElement].icon}</span>
                             <span className="text-white font-medium">{resolvePetName(pet)}</span>
-                            <span className={`px-2 py-0.5 rounded text-xs ${genderColors[pet.gender].bg} ${genderColors[pet.gender].text}`}>
+                          <span className={`px-2 py-0.5 rounded text-xs ${genderColors[pet.gender].bg} ${genderColors[pet.gender].text}`}>
                               {pet.gender === 'male' ? '♂' : '♀'}
                             </span>
                           </div>
-                          <span className="text-green-400">Ξ {pet.price}</span>
+                          <span className="text-green-400">
+                            {pet.price} {t('market.pointsUnit')}
+                          </span>
+                        </div>
+                        <div className="mt-2 text-xs text-slate-300">
+                          {elementLabel} • {t('market.level')} {pet.level}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-400">
+                          {pet.attack}⚔️ {pet.defense}🛡️ • {t('dashboard.pet.hp')} {pet.hp}/{pet.maxHp}
                         </div>
                         <button
                           onClick={() => handleRemoveFromSale(pet.id)}
@@ -427,6 +509,9 @@ export default function Market() {
                   const myPets = readLocalPets('myPets');
                   return myPets.map((pet: Pet) => {
                     const primaryElement = getPrimaryElement(pet);
+                    const elementLabel = normalizeElements(pet.element)
+                      .map((element) => t(`dashboard.element.${element}`))
+                      .join('/');
                     return (
                       <div
                         key={pet.id}
@@ -451,7 +536,8 @@ export default function Market() {
                           </div>
                         </div>
                         <div className="text-xs text-slate-400 mb-2">
-                          {t('market.level')} {pet.level} • {pet.attack}⚔️ {pet.defense}🛡️
+                          {elementLabel} • {t('market.level')} {pet.level} • {pet.attack}⚔️ {pet.defense}🛡️ •{' '}
+                          {t('dashboard.pet.hp')} {pet.hp}/{pet.maxHp}
                         </div>
                         <button
                           onClick={() => handleListForSale(pet.id)}

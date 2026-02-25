@@ -23,6 +23,14 @@ let gatherAmbienceFilter: BiquadFilterNode | null = null;
 let gatherAmbienceOscillators: OscillatorNode[] = [];
 let gatherAmbiencePulseTimer: number | null = null;
 let isGatherAmbiencePlaying = false;
+let authShowcaseGain: GainNode | null = null;
+let authShowcaseTimer: number | null = null;
+let isAuthShowcasePlaying = false;
+let authShowcaseFxGain: GainNode | null = null;
+let authShowcaseFxTimer: number | null = null;
+let isAuthShowcaseFxPlaying = false;
+
+type AuthUiEffect = 'switch' | 'success' | 'error' | 'sparkle';
 
 function getAudioContext(): AudioContext {
   if (!audioContext) {
@@ -174,9 +182,10 @@ function playTone(frequency: number, duration: number, volume = 0.15, type: Osci
 }
 
 function playGatherPulse(): void {
-  playTone(392, 0.7, 0.035, 'sine');
-  setTimeout(() => playTone(523.25, 0.75, 0.03, 'sine'), 320);
-  setTimeout(() => playTone(659.25, 0.8, 0.025, 'sine'), 680);
+  // Softer, slower chime cluster for an elegant underwater ambience.
+  playTone(293.66, 1.3, 0.015, 'sine');
+  setTimeout(() => playTone(369.99, 1.45, 0.013, 'sine'), 900);
+  setTimeout(() => playTone(440, 1.6, 0.011, 'sine'), 1800);
 }
 
 export function startGatherAmbience(): void {
@@ -191,46 +200,67 @@ export function startGatherAmbience(): void {
     }
 
     gatherAmbienceGain = ctx.createGain();
-    gatherAmbienceGain.gain.value = 0.02;
+    const now = ctx.currentTime;
+    gatherAmbienceGain.gain.setValueAtTime(0, now);
+    gatherAmbienceGain.gain.linearRampToValueAtTime(0.013, now + 2.2);
     gatherAmbienceFilter = ctx.createBiquadFilter();
     gatherAmbienceFilter.type = 'lowpass';
-    gatherAmbienceFilter.frequency.value = 780;
-    gatherAmbienceFilter.Q.value = 0.45;
+    gatherAmbienceFilter.frequency.value = 540;
+    gatherAmbienceFilter.Q.value = 0.35;
     gatherAmbienceFilter.connect(gatherAmbienceGain);
     gatherAmbienceGain.connect(ctx.destination);
 
     const low = ctx.createOscillator();
     low.type = 'sine';
-    low.frequency.value = 98;
+    low.frequency.value = 130.81;
 
     const mid = ctx.createOscillator();
-    mid.type = 'sine';
-    mid.frequency.value = 147;
+    mid.type = 'triangle';
+    mid.frequency.value = 164.81;
 
     const shimmer = ctx.createOscillator();
-    shimmer.type = 'triangle';
+    shimmer.type = 'sine';
     shimmer.frequency.value = 196;
+
+    const air = ctx.createOscillator();
+    air.type = 'sine';
+    air.frequency.value = 261.63;
+
+    const lowGain = ctx.createGain();
+    lowGain.gain.value = 0.42;
+    const midGain = ctx.createGain();
+    midGain.gain.value = 0.24;
+    const shimmerGain = ctx.createGain();
+    shimmerGain.gain.value = 0.16;
+    const airGain = ctx.createGain();
+    airGain.gain.value = 0.08;
 
     const lfo = ctx.createOscillator();
     lfo.type = 'sine';
-    lfo.frequency.value = 0.06;
+    lfo.frequency.value = 0.03;
     const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 0.007;
+    lfoGain.gain.value = 0.0038;
     lfo.connect(lfoGain);
     lfoGain.connect(gatherAmbienceGain.gain);
 
-    low.connect(gatherAmbienceFilter);
-    mid.connect(gatherAmbienceFilter);
-    shimmer.connect(gatherAmbienceFilter);
+    low.connect(lowGain);
+    mid.connect(midGain);
+    shimmer.connect(shimmerGain);
+    air.connect(airGain);
+    lowGain.connect(gatherAmbienceFilter);
+    midGain.connect(gatherAmbienceFilter);
+    shimmerGain.connect(gatherAmbienceFilter);
+    airGain.connect(gatherAmbienceFilter);
 
     low.start();
     mid.start();
     shimmer.start();
+    air.start();
     lfo.start();
 
-    gatherAmbienceOscillators = [low, mid, shimmer, lfo];
+    gatherAmbienceOscillators = [low, mid, shimmer, air, lfo];
     playGatherPulse();
-    gatherAmbiencePulseTimer = window.setInterval(playGatherPulse, 11000);
+    gatherAmbiencePulseTimer = window.setInterval(playGatherPulse, 15000);
     isGatherAmbiencePlaying = true;
   } catch {
     console.log('Background ambience not available');
@@ -285,6 +315,266 @@ export function playGatherReadySound(): void {
   playTone(440, 0.3, 0.06, 'sine');
   setTimeout(() => playTone(554.37, 0.35, 0.06, 'sine'), 180);
   setTimeout(() => playTone(659.25, 0.45, 0.06, 'sine'), 420);
+}
+
+function playAuthPianoTone(frequency: number, delay: number, duration: number, velocity: number): void {
+  try {
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+
+    const now = ctx.currentTime + Math.max(0, delay);
+    const body = ctx.createOscillator();
+    const harmonics = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const noteGain = ctx.createGain();
+
+    body.type = 'triangle';
+    body.frequency.setValueAtTime(frequency, now);
+    harmonics.type = 'sine';
+    harmonics.frequency.setValueAtTime(frequency * 2, now);
+
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(2200, now);
+    filter.frequency.exponentialRampToValueAtTime(820, now + duration * 0.78);
+    filter.Q.value = 0.6;
+
+    noteGain.gain.setValueAtTime(0.0001, now);
+    noteGain.gain.exponentialRampToValueAtTime(Math.max(0.0001, velocity), now + 0.05);
+    noteGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    body.connect(filter);
+    harmonics.connect(filter);
+    filter.connect(noteGain);
+    if (authShowcaseGain) {
+      noteGain.connect(authShowcaseGain);
+    } else {
+      noteGain.connect(ctx.destination);
+    }
+
+    body.start(now);
+    harmonics.start(now);
+    body.stop(now + duration + 0.05);
+    harmonics.stop(now + duration + 0.05);
+  } catch {
+    console.log('Sound not available');
+  }
+}
+
+function scheduleAuthShowcasePhrase(): void {
+  const opening = [261.63, 329.63, 392, 523.25];
+  const response = [293.66, 369.99, 440, 587.33];
+
+  opening.forEach((note, index) => {
+    playAuthPianoTone(note, index * 0.33, 1.45 - index * 0.08, 0.036);
+  });
+  playAuthPianoTone(659.25, 1.52, 1.35, 0.028);
+
+  response.forEach((note, index) => {
+    playAuthPianoTone(note, 2.24 + index * 0.32, 1.25 - index * 0.06, 0.033);
+  });
+
+  playAuthPianoTone(523.25, 3.58, 1.7, 0.034);
+}
+
+export function startAuthShowcaseMusic(): void {
+  if (isAuthShowcasePlaying) {
+    return;
+  }
+
+  try {
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+
+    authShowcaseGain = ctx.createGain();
+    const now = ctx.currentTime;
+    authShowcaseGain.gain.setValueAtTime(0.0001, now);
+    authShowcaseGain.gain.exponentialRampToValueAtTime(0.11, now + 1.8);
+    authShowcaseGain.connect(ctx.destination);
+
+    scheduleAuthShowcasePhrase();
+    authShowcaseTimer = window.setInterval(scheduleAuthShowcasePhrase, 5200);
+    isAuthShowcasePlaying = true;
+  } catch {
+    console.log('Background music not available');
+  }
+}
+
+export function stopAuthShowcaseMusic(): void {
+  if (!isAuthShowcasePlaying) {
+    return;
+  }
+
+  if (authShowcaseTimer !== null) {
+    window.clearInterval(authShowcaseTimer);
+    authShowcaseTimer = null;
+  }
+
+  if (authShowcaseGain) {
+    try {
+      const ctx = getAudioContext();
+      const now = ctx.currentTime;
+      authShowcaseGain.gain.cancelScheduledValues(now);
+      authShowcaseGain.gain.setValueAtTime(Math.max(0.0001, authShowcaseGain.gain.value), now);
+      authShowcaseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+
+      const gainRef = authShowcaseGain;
+      window.setTimeout(() => {
+        try {
+          gainRef.disconnect();
+        } catch {
+          // Ignore disconnect errors.
+        }
+      }, 520);
+    } catch {
+      // Ignore stop errors.
+    }
+  }
+
+  authShowcaseGain = null;
+  isAuthShowcasePlaying = false;
+}
+
+function playAuthFxTone(
+  frequency: number,
+  delay: number,
+  duration: number,
+  velocity: number,
+  type: OscillatorType = 'sine',
+): void {
+  try {
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+
+    const now = ctx.currentTime + Math.max(0, delay);
+    const oscillator = ctx.createOscillator();
+    const overtone = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const noteGain = ctx.createGain();
+
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, now);
+    overtone.type = 'sine';
+    overtone.frequency.setValueAtTime(frequency * 1.995, now);
+
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(Math.max(220, frequency * 1.3), now);
+    filter.Q.value = 0.8;
+
+    noteGain.gain.setValueAtTime(0.0001, now);
+    noteGain.gain.exponentialRampToValueAtTime(Math.max(0.0001, velocity), now + 0.03);
+    noteGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    oscillator.connect(filter);
+    overtone.connect(filter);
+    filter.connect(noteGain);
+    if (authShowcaseFxGain) {
+      noteGain.connect(authShowcaseFxGain);
+    } else {
+      noteGain.connect(ctx.destination);
+    }
+
+    oscillator.start(now);
+    overtone.start(now);
+    oscillator.stop(now + duration + 0.04);
+    overtone.stop(now + duration + 0.04);
+  } catch {
+    console.log('Sound not available');
+  }
+}
+
+function scheduleAuthShowcaseFx(): void {
+  playAuthFxTone(783.99, 0, 0.56, 0.026, 'triangle');
+  playAuthFxTone(987.77, 0.22, 0.48, 0.022, 'sine');
+  playAuthFxTone(1318.51, 0.54, 0.6, 0.018, 'sine');
+}
+
+export function startAuthShowcaseEffects(): void {
+  if (isAuthShowcaseFxPlaying) {
+    return;
+  }
+
+  try {
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+
+    authShowcaseFxGain = ctx.createGain();
+    const now = ctx.currentTime;
+    authShowcaseFxGain.gain.setValueAtTime(0.0001, now);
+    authShowcaseFxGain.gain.exponentialRampToValueAtTime(0.08, now + 1.2);
+    authShowcaseFxGain.connect(ctx.destination);
+
+    scheduleAuthShowcaseFx();
+    authShowcaseFxTimer = window.setInterval(scheduleAuthShowcaseFx, 7600);
+    isAuthShowcaseFxPlaying = true;
+  } catch {
+    console.log('Background effect sound not available');
+  }
+}
+
+export function stopAuthShowcaseEffects(): void {
+  if (!isAuthShowcaseFxPlaying) {
+    return;
+  }
+
+  if (authShowcaseFxTimer !== null) {
+    window.clearInterval(authShowcaseFxTimer);
+    authShowcaseFxTimer = null;
+  }
+
+  if (authShowcaseFxGain) {
+    try {
+      const ctx = getAudioContext();
+      const now = ctx.currentTime;
+      authShowcaseFxGain.gain.cancelScheduledValues(now);
+      authShowcaseFxGain.gain.setValueAtTime(Math.max(0.0001, authShowcaseFxGain.gain.value), now);
+      authShowcaseFxGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.34);
+
+      const gainRef = authShowcaseFxGain;
+      window.setTimeout(() => {
+        try {
+          gainRef.disconnect();
+        } catch {
+          // Ignore disconnect errors.
+        }
+      }, 420);
+    } catch {
+      // Ignore stop errors.
+    }
+  }
+
+  authShowcaseFxGain = null;
+  isAuthShowcaseFxPlaying = false;
+}
+
+export function playAuthUiEffect(effect: AuthUiEffect = 'switch'): void {
+  switch (effect) {
+    case 'success':
+      playAuthFxTone(523.25, 0, 0.42, 0.032, 'triangle');
+      playAuthFxTone(659.25, 0.16, 0.46, 0.03, 'sine');
+      playAuthFxTone(783.99, 0.34, 0.5, 0.028, 'sine');
+      break;
+    case 'error':
+      playAuthFxTone(659.25, 0, 0.28, 0.03, 'triangle');
+      playAuthFxTone(493.88, 0.16, 0.3, 0.028, 'triangle');
+      playAuthFxTone(369.99, 0.3, 0.35, 0.026, 'triangle');
+      break;
+    case 'sparkle':
+      scheduleAuthShowcaseFx();
+      break;
+    case 'switch':
+    default:
+      playAuthFxTone(698.46, 0, 0.24, 0.024, 'triangle');
+      playAuthFxTone(880, 0.12, 0.28, 0.022, 'sine');
+      break;
+  }
 }
 
 // 生成简单的音效

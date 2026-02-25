@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount } from 'wagmi';
 import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import AuthStatus from '@/components/AuthStatus';
+import RequireAuth from '@/components/RequireAuth';
+import { useAuth } from '@/components/AuthProvider';
+import { getScopedStorageKey } from '@/lib/auth';
 import { playBreedSound } from '@/lib/sounds';
 import { localizePetName } from '@/lib/petNames';
 import { readActiveGatherTask } from '@/lib/magicPotions';
@@ -20,6 +22,8 @@ interface Pet {
   element: Element[];
   gender: Gender;
   level: number;
+  attack: number;
+  defense: number;
   hp: number;
   maxHp: number;
   mp: number;
@@ -49,7 +53,7 @@ const DEMO_BREEDING_TIME = 10;
 
 export default function Breed() {
   const { t, i18n } = useTranslation();
-  const { isConnected } = useAccount();
+  const { ready, isAuthenticated, username } = useAuth();
   const [selectedPets, setSelectedPets] = useState<number[]>([]);
   const [breeding, setBreeding] = useState(false);
   const [breedStartTime, setBreedStartTime] = useState<number | null>(null);
@@ -58,6 +62,13 @@ export default function Breed() {
     name: string;
     element: Element[];
     gender: Gender;
+    level: number;
+    attack: number;
+    defense: number;
+    hp: number;
+    maxHp: number;
+    mp: number;
+    maxMp: number;
     rarity: PetRarity;
     generation?: number;
   } | null>(null);
@@ -74,14 +85,15 @@ export default function Breed() {
   };
 
   const readLocalPets = (): Pet[] => {
+    const myPetsKey = getScopedStorageKey('myPets', username || undefined);
     try {
-      const raw = localStorage.getItem('myPets');
+      const raw = localStorage.getItem(myPetsKey);
       if (!raw) {
         return [];
       }
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) {
-        localStorage.removeItem('myPets');
+        localStorage.removeItem(myPetsKey);
         return [];
       }
       return parsed.map((p: any) => ({
@@ -89,6 +101,8 @@ export default function Breed() {
         element: normalizeElements(p.element),
         rarity: normalizePetRarity(p.rarity),
         level: typeof p.level === 'number' && p.level > 0 ? p.level : 1,
+        attack: typeof p.attack === 'number' && p.attack > 0 ? p.attack : 15,
+        defense: typeof p.defense === 'number' && p.defense > 0 ? p.defense : 10,
         maxHp:
           typeof p.maxHp === 'number' && p.maxHp > 0
             ? p.maxHp
@@ -115,18 +129,18 @@ export default function Breed() {
               : 30 + (typeof p.level === 'number' && p.level > 0 ? p.level : 1) * 5,
       }));
     } catch {
-      localStorage.removeItem('myPets');
+      localStorage.removeItem(myPetsKey);
       return [];
     }
   };
 
   useEffect(() => {
-    if (!isConnected) {
+    if (!isAuthenticated || !username) {
       return;
     }
 
     const syncGatherState = () => {
-      const activeTask = readActiveGatherTask();
+      const activeTask = readActiveGatherTask(Date.now(), username);
       if (activeTask) {
         setGatherBusyPetId(activeTask.petId);
         setGatherRemainingMs(Math.max(0, activeTask.endsAt - Date.now()));
@@ -139,7 +153,7 @@ export default function Breed() {
     syncGatherState();
     const timer = setInterval(syncGatherState, 1000);
     return () => clearInterval(timer);
-  }, [isConnected]);
+  }, [isAuthenticated, username]);
 
   const myPets: Pet[] =
     typeof window !== 'undefined'
@@ -253,6 +267,13 @@ export default function Breed() {
     setResult({
       element: newPet.element,
       gender: newPet.gender,
+      level: newPet.level,
+      attack: newPet.attack,
+      defense: newPet.defense,
+      hp: newPet.hp,
+      maxHp: newPet.maxHp,
+      mp: newPet.mp,
+      maxMp: newPet.maxMp,
       rarity: newPet.rarity,
       name: newPet.name,
       generation: newPet.generation,
@@ -260,7 +281,10 @@ export default function Breed() {
 
     const existingPets = readLocalPets();
     const newPetWithId = { ...newPet, id: Date.now() };
-    localStorage.setItem('myPets', JSON.stringify([...existingPets, newPetWithId]));
+    localStorage.setItem(
+      getScopedStorageKey('myPets', username || undefined),
+      JSON.stringify([...existingPets, newPetWithId]),
+    );
 
     setBreeding(false);
     setBreedStartTime(null);
@@ -325,15 +349,12 @@ export default function Breed() {
     }
   };
 
-  if (!isConnected) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl text-white mb-4">{t('breed.connectWallet')}</h2>
-          <ConnectButton />
-        </div>
-      </div>
-    );
+  if (!ready) {
+    return <div className="min-h-screen bg-slate-900" />;
+  }
+
+  if (!isAuthenticated) {
+    return <RequireAuth title={t('auth.loginRequired')} />;
   }
 
   const demoDurationLabel = formatDuration(DEMO_BREEDING_TIME);
@@ -341,8 +362,13 @@ export default function Breed() {
   const activeDurationLabel = DEMO_MODE ? demoDurationLabel : liveDurationLabel;
 
   return (
-    <div className="min-h-screen bg-slate-900">
-      <header className="flex items-center justify-between px-6 py-4 bg-slate-800/50 backdrop-blur-sm">
+    <div className="min-h-screen relative overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(244,114,182,0.24),transparent_44%),radial-gradient(circle_at_82%_18%,rgba(192,132,252,0.2),transparent_42%),linear-gradient(180deg,#1b1023_0%,#111827_58%,#0b1220_100%)]" />
+      <div className="pointer-events-none absolute -top-24 -left-16 h-72 w-72 rounded-full bg-pink-500/25 blur-3xl animate-pulse" />
+      <div className="pointer-events-none absolute top-1/3 -right-20 h-80 w-80 rounded-full bg-fuchsia-400/20 blur-3xl animate-pulse [animation-delay:400ms]" />
+      <div className="pointer-events-none absolute -bottom-28 left-1/2 h-80 w-[32rem] -translate-x-1/2 rounded-full bg-rose-400/10 blur-3xl" />
+
+      <header className="relative z-10 flex items-center justify-between px-6 py-4 bg-slate-900/45 border-b border-pink-400/15 backdrop-blur-sm">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center gap-2">
             <span className="text-2xl">🦞</span>
@@ -368,11 +394,11 @@ export default function Breed() {
         </div>
         <div className="flex items-center gap-4">
           <LanguageSwitcher />
-          <ConnectButton />
+          <AuthStatus />
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="relative z-10 container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold text-white text-center mb-8">🐣 {t('breed.title')}</h1>
 
         {DEMO_MODE && (
@@ -422,6 +448,12 @@ export default function Breed() {
                 <div className="text-white font-medium text-center">{localizePetName(pet.name, t)}</div>
                 <div className={`text-center text-xs mt-1 ${elementColors[pet.element[0]].text}`}>
                   {pet.element.map((element) => t(`dashboard.element.${element}`)).join('/')}
+                </div>
+                <div className="text-center text-xs mt-1 text-slate-300">
+                  {t('dashboard.pet.level')} {pet.level} • {pet.attack}⚔️ {pet.defense}🛡️
+                </div>
+                <div className="text-center text-xs mt-1 text-slate-400">
+                  {t('dashboard.pet.hp')} {pet.hp}/{pet.maxHp} • {t('dashboard.pet.mp')} {pet.mp}/{pet.maxMp}
                 </div>
                 {gatherBusyPetId === pet.id && (
                   <div className="text-center text-xs mt-2 text-blue-300">
@@ -542,6 +574,13 @@ export default function Breed() {
                   ? `♂ ${t('dashboard.gender.male')}`
                   : `♀ ${t('dashboard.gender.female')}`}
               </span>
+
+              <p className="text-sm mt-3 text-slate-300">
+                {t('dashboard.pet.level')} {result.level} • {result.attack}⚔️ {result.defense}🛡️
+              </p>
+              <p className="text-sm mt-1 text-slate-400">
+                {t('dashboard.pet.hp')} {result.hp}/{result.maxHp} • {t('dashboard.pet.mp')} {result.mp}/{result.maxMp}
+              </p>
 
               <p
                 className={`text-xl mt-4 ${

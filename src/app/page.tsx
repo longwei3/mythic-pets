@@ -2,17 +2,76 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount } from 'wagmi';
 import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import AuthStatus from '@/components/AuthStatus';
+import { useAuth } from '@/components/AuthProvider';
 import { localizePetName } from '@/lib/petNames';
 import { formatCooldownTimer } from '@/lib/battleCooldown';
 import { readActiveGatherTask, type GatherTask } from '@/lib/magicPotions';
 
+type Element = 'gold' | 'wood' | 'water' | 'fire' | 'earth';
+type Gender = 'male' | 'female';
+
+interface ShowcasePet {
+  id: string;
+  nameKey: 'dashboard.starterPets.fire' | 'dashboard.starterPets.water';
+  element: Element[];
+  gender: Gender;
+  level: number;
+  attack: number;
+  defense: number;
+  hp: number;
+  maxHp: number;
+  mp: number;
+  maxMp: number;
+}
+
+const elementStyles: Record<Element, { icon: string; text: string }> = {
+  gold: { icon: '🪙', text: 'text-yellow-300' },
+  wood: { icon: '🪵', text: 'text-green-300' },
+  water: { icon: '💧', text: 'text-blue-300' },
+  fire: { icon: '🔥', text: 'text-red-300' },
+  earth: { icon: '🪨', text: 'text-amber-300' },
+};
+
+const genderStyles: Record<Gender, { badge: string; text: string }> = {
+  male: { badge: 'bg-red-500/25', text: 'text-red-300' },
+  female: { badge: 'bg-pink-500/25', text: 'text-pink-300' },
+};
+
+const showcasePets: ShowcasePet[] = [
+  {
+    id: 'starter-fire',
+    nameKey: 'dashboard.starterPets.fire',
+    element: ['fire', 'water', 'earth'],
+    gender: 'male',
+    level: 1,
+    attack: 20,
+    defense: 10,
+    hp: 50,
+    maxHp: 50,
+    mp: 40,
+    maxMp: 40,
+  },
+  {
+    id: 'starter-water',
+    nameKey: 'dashboard.starterPets.water',
+    element: ['water', 'fire', 'wood'],
+    gender: 'female',
+    level: 1,
+    attack: 18,
+    defense: 12,
+    hp: 55,
+    maxHp: 55,
+    mp: 45,
+    maxMp: 45,
+  },
+];
+
 export default function Home() {
   const { t } = useTranslation();
-  const { isConnected } = useAccount();
+  const { isAuthenticated, username } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [gatherTask, setGatherTask] = useState<GatherTask | null>(null);
   const [nowMs, setNowMs] = useState(Date.now());
@@ -22,20 +81,20 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!mounted || !isConnected) {
+    if (!mounted || !isAuthenticated) {
       setGatherTask(null);
       return;
     }
 
     const syncGatherTask = () => {
       setNowMs(Date.now());
-      setGatherTask(readActiveGatherTask());
+      setGatherTask(readActiveGatherTask(Date.now(), username || undefined));
     };
 
     syncGatherTask();
     const timer = setInterval(syncGatherTask, 1000);
     return () => clearInterval(timer);
-  }, [isConnected, mounted]);
+  }, [isAuthenticated, mounted, username]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-900">
@@ -65,7 +124,7 @@ export default function Home() {
         </nav>
         <div className="flex items-center gap-4">
           <LanguageSwitcher />
-          {mounted && <ConnectButton />}
+          {mounted && <AuthStatus />}
         </div>
       </header>
 
@@ -80,7 +139,7 @@ export default function Home() {
           <p className="text-lg text-slate-400 max-w-2xl mx-auto mb-8">
             {t('landing.description')}
           </p>
-          {isConnected && gatherTask && (
+          {isAuthenticated && gatherTask && (
             <div className="max-w-2xl mx-auto mb-6 p-4 rounded-xl border border-cyan-500/40 bg-cyan-500/10">
               <p className="text-cyan-200 text-sm">
                 🌊{' '}
@@ -99,12 +158,19 @@ export default function Home() {
               </div>
             </div>
           )}
-          {isConnected && (
+          {isAuthenticated ? (
             <Link
               href="/dashboard"
               className="inline-block px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full text-xl font-semibold hover:from-indigo-500 hover:to-purple-500 transition-all transform hover:scale-105"
             >
               {t('landing.getStarted')} →
+            </Link>
+          ) : (
+            <Link
+              href="/auth?next=%2Fdashboard"
+              className="inline-block px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full text-xl font-semibold hover:from-indigo-500 hover:to-purple-500 transition-all transform hover:scale-105"
+            >
+              {t('auth.loginOrRegister')} →
             </Link>
           )}
         </div>
@@ -140,6 +206,50 @@ export default function Home() {
             </p>
           </div>
         </div>
+
+        <section className="mt-16">
+          <h3 className="text-2xl font-bold text-white text-center mb-3">{t('landing.showcaseTitle')}</h3>
+          <p className="text-center text-slate-400 mb-6">{t('landing.showcaseDesc')}</p>
+          <div className="grid md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+            {showcasePets.map((pet) => (
+              <div key={pet.id} className="bg-slate-800/55 rounded-2xl p-5 border border-slate-600/60">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-lg font-semibold text-white">{t(pet.nameKey)}</h4>
+                  <span className={`px-2 py-0.5 rounded text-xs ${genderStyles[pet.gender].badge} ${genderStyles[pet.gender].text}`}>
+                    {pet.gender === 'male'
+                      ? `♂ ${t('dashboard.gender.male')}`
+                      : `♀ ${t('dashboard.gender.female')}`}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 mb-3">
+                  {pet.element.map((element) => (
+                    <span key={`${pet.id}-${element}`} className={elementStyles[element].text} title={t(`dashboard.element.${element}`)}>
+                      {elementStyles[element].icon}
+                    </span>
+                  ))}
+                  <span className="text-xs text-slate-300">{pet.element.map((element) => t(`dashboard.element.${element}`)).join('/')}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <span className="text-slate-300">
+                    {t('dashboard.pet.level')} <span className="text-white">{pet.level}</span>
+                  </span>
+                  <span className="text-slate-300">
+                    {t('dashboard.attack')} <span className="text-red-300">{pet.attack}</span>
+                  </span>
+                  <span className="text-slate-300">
+                    {t('dashboard.defense')} <span className="text-blue-300">{pet.defense}</span>
+                  </span>
+                  <span className="text-slate-300">
+                    {t('dashboard.pet.hp')} <span className="text-green-300">{pet.hp}/{pet.maxHp}</span>
+                  </span>
+                  <span className="text-slate-300 col-span-2">
+                    {t('dashboard.pet.mp')} <span className="text-cyan-300">{pet.mp}/{pet.maxMp}</span>
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
 
         <div className="mt-20 text-center">
           <div className="inline-flex gap-8 md:gap-16">
