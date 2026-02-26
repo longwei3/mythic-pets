@@ -1,5 +1,9 @@
 import { ADVENTURE_MAP_BOUNDARY } from '@/features/adventure3d/config/gameBalance';
 import type { MovementInput, PlayerState, Vec2 } from '@/features/adventure3d/core/types';
+import { resolvePositionWithCoralObstacles } from '@/features/adventure3d/systems/coralObstacleSystem';
+
+const PLAYER_COLLISION_RADIUS = 0.82;
+const PLAYER_MOVE_SUBSTEP_DISTANCE = PLAYER_COLLISION_RADIUS * 0.52;
 
 export function clampToMap(position: Vec2): Vec2 {
   const dist = Math.hypot(position.x, position.z);
@@ -44,10 +48,22 @@ export function stepPlayerMovement(
     right.z * direction.x + forward.z * direction.z,
   );
 
-  const nextPosition = clampToMap({
-    x: player.position.x + worldDirection.x * speed * deltaSec,
-    z: player.position.z + worldDirection.z * speed * deltaSec,
-  });
+  let nextPosition = { ...player.position };
+  if (isMoving) {
+    const travelDistance = speed * Math.max(0, deltaSec);
+    const subSteps = Math.max(1, Math.min(14, Math.ceil(travelDistance / PLAYER_MOVE_SUBSTEP_DISTANCE)));
+    const stepDistance = travelDistance / subSteps;
+
+    for (let step = 0; step < subSteps; step += 1) {
+      const stepPosition = {
+        x: nextPosition.x + worldDirection.x * stepDistance,
+        z: nextPosition.z + worldDirection.z * stepDistance,
+      };
+      const clampedPosition = clampToMap(stepPosition);
+      const obstacleResolvedPosition = resolvePositionWithCoralObstacles(clampedPosition, PLAYER_COLLISION_RADIUS, 0.16);
+      nextPosition = clampToMap(obstacleResolvedPosition);
+    }
+  }
 
   const energyDelta = input.sprint && isMoving ? -18 * deltaSec : 13 * deltaSec;
   const nextEnergy = Math.max(0, Math.min(player.maxEnergy, player.energy + energyDelta));

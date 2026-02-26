@@ -18,6 +18,7 @@ import {
   readMythBalance,
 } from '@/lib/economy';
 import { normalizePetRarity, type PetRarity } from '@/lib/petRarity';
+import { getExpThresholdForLevel, resolveExpProgress, scaleBaseStatByLevel } from '@/lib/petProgression';
 
 type Element = 'gold' | 'wood' | 'water' | 'fire' | 'earth';
 type Gender = 'male' | 'female';
@@ -65,19 +66,20 @@ function normalizeElements(element: unknown): Element[] {
 
 function normalizePet(rawPet: any): Pet {
   const level = typeof rawPet.level === 'number' && rawPet.level > 0 ? rawPet.level : 1;
+  const expProgress = resolveExpProgress(level, typeof rawPet.exp === 'number' ? rawPet.exp : 0);
   const maxHp =
     typeof rawPet.maxHp === 'number' && rawPet.maxHp > 0
       ? rawPet.maxHp
       : typeof rawPet.hp === 'number' && rawPet.hp > 0
         ? rawPet.hp
-        : 50;
+        : scaleBaseStatByLevel(50, expProgress.level);
   const hp = typeof rawPet.hp === 'number' && rawPet.hp >= 0 ? Math.min(rawPet.hp, maxHp) : maxHp;
   const maxMp =
     typeof rawPet.maxMp === 'number' && rawPet.maxMp > 0
       ? rawPet.maxMp
       : typeof rawPet.mp === 'number' && rawPet.mp > 0
         ? rawPet.mp
-        : 30 + level * 5;
+        : scaleBaseStatByLevel(35, expProgress.level);
   const mp = typeof rawPet.mp === 'number' && rawPet.mp >= 0 ? Math.min(rawPet.mp, maxMp) : maxMp;
 
   return {
@@ -85,9 +87,9 @@ function normalizePet(rawPet: any): Pet {
     name: typeof rawPet.name === 'string' ? rawPet.name : 'Lobster',
     element: normalizeElements(rawPet.element),
     gender: rawPet.gender === 'female' ? 'female' : 'male',
-    level,
-    exp: typeof rawPet.exp === 'number' && rawPet.exp >= 0 ? rawPet.exp : 0,
-    maxExp: typeof rawPet.maxExp === 'number' && rawPet.maxExp > 0 ? rawPet.maxExp : 100,
+    level: expProgress.level,
+    exp: expProgress.current,
+    maxExp: getExpThresholdForLevel(expProgress.level),
     attack: typeof rawPet.attack === 'number' && rawPet.attack > 0 ? rawPet.attack : 15,
     defense: typeof rawPet.defense === 'number' && rawPet.defense > 0 ? rawPet.defense : 10,
     hp,

@@ -25,6 +25,7 @@ import {
   startGatherAmbience,
   stopGatherAmbience,
 } from '@/lib/sounds';
+import { resolveExpProgress, scaleBaseStatByLevel } from '@/lib/petProgression';
 
 type Element = 'gold' | 'wood' | 'water' | 'fire' | 'earth';
 type Gender = 'male' | 'female';
@@ -89,27 +90,33 @@ export default function GatherPage() {
       if (rawPets) {
         const parsed = JSON.parse(rawPets);
         if (Array.isArray(parsed)) {
-          const normalizedPets = parsed.map((pet: any) => ({
-            ...pet,
-            element: normalizeElements(pet.element),
-            level: typeof pet.level === 'number' && pet.level > 0 ? pet.level : 1,
-            attack: typeof pet.attack === 'number' && pet.attack > 0 ? pet.attack : 15,
-            defense: typeof pet.defense === 'number' && pet.defense > 0 ? pet.defense : 10,
-            hp: typeof pet.hp === 'number' && pet.hp > 0 ? pet.hp : 50,
-            maxHp:
-              typeof pet.maxHp === 'number' && pet.maxHp > 0
-                ? pet.maxHp
-                : typeof pet.hp === 'number' && pet.hp > 0
-                  ? pet.hp
-                  : 50,
-            mp: typeof pet.mp === 'number' && pet.mp >= 0 ? pet.mp : 35,
-            maxMp:
-              typeof pet.maxMp === 'number' && pet.maxMp > 0
-                ? pet.maxMp
-                : typeof pet.mp === 'number' && pet.mp > 0
-                  ? pet.mp
-                  : 35,
-          })) as Pet[];
+          const normalizedPets = parsed.map((pet: any) => {
+            const expProgress = resolveExpProgress(
+              typeof pet.level === 'number' && pet.level > 0 ? pet.level : 1,
+              typeof pet.exp === 'number' ? pet.exp : 0,
+            );
+            return {
+              ...pet,
+              element: normalizeElements(pet.element),
+              level: expProgress.level,
+              attack: typeof pet.attack === 'number' && pet.attack > 0 ? pet.attack : 15,
+              defense: typeof pet.defense === 'number' && pet.defense > 0 ? pet.defense : 10,
+              hp: typeof pet.hp === 'number' && pet.hp > 0 ? pet.hp : 50,
+              maxHp:
+                typeof pet.maxHp === 'number' && pet.maxHp > 0
+                  ? pet.maxHp
+                  : typeof pet.hp === 'number' && pet.hp > 0
+                    ? pet.hp
+                    : scaleBaseStatByLevel(50, expProgress.level),
+              mp: typeof pet.mp === 'number' && pet.mp >= 0 ? pet.mp : 35,
+              maxMp:
+                typeof pet.maxMp === 'number' && pet.maxMp > 0
+                  ? pet.maxMp
+                  : typeof pet.mp === 'number' && pet.mp > 0
+                    ? pet.mp
+                    : scaleBaseStatByLevel(35, expProgress.level),
+            };
+          }) as Pet[];
           setPets(normalizedPets);
           if (!selectedPetId && normalizedPets.length > 0) {
             setSelectedPetId(normalizedPets[0].id);

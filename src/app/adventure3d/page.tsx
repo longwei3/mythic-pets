@@ -37,8 +37,9 @@ import {
   updateAdventureSettings,
 } from '@/features/adventure3d/save/profileSave';
 import { useAdventureInput } from '@/features/adventure3d/systems/inputSystem';
-import { ADVENTURE_MAP_BOUNDARY } from '@/features/adventure3d/config/gameBalance';
+import { ADVENTURE_MAP_BOUNDARY, DEFAULT_PLAYER_STATE } from '@/features/adventure3d/config/gameBalance';
 import { grantMyth, readMythBalance } from '@/lib/economy';
+import { computeExpProgressFromTotalExp, scaleBaseStatByLevel } from '@/lib/petProgression';
 import {
   playAdventureActionSfx,
   playAdventureCreatureSfx,
@@ -363,6 +364,56 @@ export default function Adventure3DPage() {
 
   const playerHpRatio = useMemo(() => Math.max(0, world.player.hp / world.player.maxHp), [world.player.hp, world.player.maxHp]);
   const playerEnergyRatio = useMemo(() => Math.max(0, world.player.energy / world.player.maxEnergy), [world.player.energy, world.player.maxEnergy]);
+  const adventureExpTotal = useMemo(
+    () =>
+      world.run.kills * 28 +
+      world.loot.shell * 6 +
+      world.loot.essence * 10 +
+      world.loot.relic * 18 +
+      world.loot.myth * 4 +
+      Math.round(world.run.score * 0.2),
+    [world.run.kills, world.loot.shell, world.loot.essence, world.loot.relic, world.loot.myth, world.run.score],
+  );
+  const expProgress = useMemo(() => computeExpProgressFromTotalExp(adventureExpTotal), [adventureExpTotal]);
+  const expRatio = useMemo(() => Math.max(0, Math.min(1, expProgress.current / expProgress.next)), [expProgress.current, expProgress.next]);
+  const scaledMaxHp = useMemo(
+    () => scaleBaseStatByLevel(DEFAULT_PLAYER_STATE.maxHp, expProgress.level),
+    [expProgress.level],
+  );
+  const scaledMaxEnergy = useMemo(
+    () => scaleBaseStatByLevel(DEFAULT_PLAYER_STATE.maxEnergy, expProgress.level),
+    [expProgress.level],
+  );
+
+  useEffect(() => {
+    setWorld((prev) => {
+      const hpNeedsSync = prev.player.maxHp !== scaledMaxHp;
+      const energyNeedsSync = prev.player.maxEnergy !== scaledMaxEnergy;
+      const levelNeedsSync = prev.player.level !== expProgress.level;
+
+      if (!hpNeedsSync && !energyNeedsSync && !levelNeedsSync) {
+        return prev;
+      }
+
+      const hpRatio = prev.player.maxHp > 0 ? prev.player.hp / prev.player.maxHp : 1;
+      const energyRatio = prev.player.maxEnergy > 0 ? prev.player.energy / prev.player.maxEnergy : 1;
+      const syncedHp = Math.max(1, Math.min(scaledMaxHp, Math.round(scaledMaxHp * hpRatio)));
+      const syncedEnergy = Math.max(0, Math.min(scaledMaxEnergy, Math.round(scaledMaxEnergy * energyRatio)));
+
+      return {
+        ...prev,
+        player: {
+          ...prev.player,
+          level: expProgress.level,
+          maxHp: scaledMaxHp,
+          hp: syncedHp,
+          maxEnergy: scaledMaxEnergy,
+          energy: syncedEnergy,
+        },
+      };
+    });
+  }, [expProgress.level, scaledMaxEnergy, scaledMaxHp]);
+
   const leaderboard: AdventureRunRecord[] = useMemo(() => {
     if (!profile) {
       return [];
@@ -520,6 +571,52 @@ export default function Adventure3DPage() {
               onPrimaryFire={handlePrimaryFire}
               onCameraYawChange={handleCameraYawChange}
             />
+            <div className="pointer-events-none absolute left-3 top-3 z-20 w-56">
+              <div className="rounded-lg border border-cyan-500/35 bg-slate-900/82 px-3 py-2 shadow-[0_0_22px_rgba(8,145,178,0.2)]">
+                <div className="mb-2 flex items-center justify-between text-xs">
+                  <span className="text-slate-400">{t('adventure3d.roleName')}</span>
+                  <span className="font-semibold text-cyan-100">
+                    {username ?? '-'} · Lv.{expProgress.level}
+                  </span>
+                </div>
+
+                <div className="mb-2">
+                  <div className="mb-1 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-300">{t('adventure3d.hp')}</span>
+                    <span className="text-slate-400">
+                      {world.player.hp}/{world.player.maxHp}
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                    <div className="h-full bg-rose-500" style={{ width: `${playerHpRatio * 100}%` }} />
+                  </div>
+                </div>
+
+                <div className="mb-2">
+                  <div className="mb-1 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-300">{t('adventure3d.energy')}</span>
+                    <span className="text-slate-400">
+                      {Math.round(world.player.energy)}/{world.player.maxEnergy}
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                    <div className="h-full bg-cyan-400" style={{ width: `${playerEnergyRatio * 100}%` }} />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-300">{t('adventure3d.exp')}</span>
+                    <span className="text-slate-400">
+                      {expProgress.current}/{expProgress.next}
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                    <div className="h-full bg-amber-400" style={{ width: `${expRatio * 100}%` }} />
+                  </div>
+                </div>
+              </div>
+            </div>
             <div className="pointer-events-none absolute right-3 top-3 z-20 w-36 sm:w-40 md:w-44">
               <AdventureMiniMap world={world} />
             </div>
@@ -534,26 +631,6 @@ export default function Adventure3DPage() {
               </p>
               <p className="mt-1 text-xs text-slate-400">
                 {viewMode === 'tps' ? t('adventure3d.viewThird') : t('adventure3d.viewFirst')}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-sm text-slate-300 mb-2">{t('adventure3d.hp')}</p>
-              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-rose-500" style={{ width: `${playerHpRatio * 100}%` }} />
-              </div>
-              <p className="text-xs text-slate-400 mt-1">
-                {world.player.hp} / {world.player.maxHp}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-sm text-slate-300 mb-2">{t('adventure3d.energy')}</p>
-              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-cyan-400" style={{ width: `${playerEnergyRatio * 100}%` }} />
-              </div>
-              <p className="text-xs text-slate-400 mt-1">
-                {Math.round(world.player.energy)} / {world.player.maxEnergy}
               </p>
             </div>
 

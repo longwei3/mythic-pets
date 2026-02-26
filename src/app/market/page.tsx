@@ -12,6 +12,7 @@ import { readMythBalance, spendMyth } from '@/lib/economy';
 import { playClickSound } from '@/lib/sounds';
 import { localizePetName } from '@/lib/petNames';
 import { normalizePetRarity, type PetRarity } from '@/lib/petRarity';
+import { getExpThresholdForLevel, resolveExpProgress, scaleBaseStatByLevel } from '@/lib/petProgression';
 
 type Element = 'gold' | 'wood' | 'water' | 'fire' | 'earth';
 type Gender = 'male' | 'female';
@@ -168,13 +169,30 @@ export default function Market() {
         return [];
       }
       return parsed.map((pet) => ({
-        ...pet,
+        ...(() => {
+          const level = typeof (pet as Pet).level === 'number' && (pet as Pet).level > 0 ? (pet as Pet).level : 1;
+          const exp = typeof (pet as Pet).exp === 'number' ? (pet as Pet).exp : 0;
+          const expProgress = resolveExpProgress(level, exp);
+          return {
+            ...pet,
+            level: expProgress.level,
+            exp: expProgress.current,
+            maxExp: getExpThresholdForLevel(expProgress.level),
+            hp:
+              typeof (pet as Pet).hp === 'number' && (pet as Pet).hp > 0
+                ? (pet as Pet).hp
+                : scaleBaseStatByLevel(50, expProgress.level),
+            maxHp:
+              typeof (pet as Pet).maxHp === 'number' && (pet as Pet).maxHp > 0
+                ? (pet as Pet).maxHp
+                : typeof (pet as Pet).hp === 'number' && (pet as Pet).hp > 0
+                  ? (pet as Pet).hp
+                  : scaleBaseStatByLevel(50, expProgress.level),
+          };
+        })(),
         element: normalizeElements((pet as Pet).element),
         rarity: normalizePetRarity((pet as Pet).rarity),
-        price:
-          typeof (pet as Pet).price === 'number'
-            ? Math.max(1, Math.floor((pet as Pet).price || 0))
-            : undefined,
+        price: typeof (pet as Pet).price === 'number' ? Math.max(1, Math.floor((pet as Pet).price || 0)) : undefined,
       })) as Pet[];
     } catch {
       localStorage.removeItem(scopedKey);
@@ -229,20 +247,21 @@ export default function Market() {
     const myPets = readLocalPets('myPets');
     const nextId = myPets.reduce((maxId, current) => Math.max(maxId, current.id), 0) + 1;
     const elements = normalizeElements(pet.element);
-    const maxMp = Math.max(30, 20 + pet.level * 5);
+    const maxMp = scaleBaseStatByLevel(40, Math.max(1, Math.floor(pet.level)));
+    const expProgress = resolveExpProgress(Math.max(1, Math.floor(pet.level)), pet.exp || 0);
 
     const purchasedPet = {
       id: nextId,
       name,
       element: elements,
       gender: pet.gender,
-      level: pet.level,
-      exp: pet.exp,
-      maxExp: pet.maxExp,
+      level: expProgress.level,
+      exp: expProgress.current,
+      maxExp: getExpThresholdForLevel(expProgress.level),
       attack: pet.attack,
       defense: pet.defense,
-      hp: pet.maxHp,
-      maxHp: pet.maxHp,
+      hp: typeof pet.maxHp === 'number' && pet.maxHp > 0 ? pet.maxHp : scaleBaseStatByLevel(50, expProgress.level),
+      maxHp: typeof pet.maxHp === 'number' && pet.maxHp > 0 ? pet.maxHp : scaleBaseStatByLevel(50, expProgress.level),
       mp: maxMp,
       maxMp,
       rarity: pet.rarity,

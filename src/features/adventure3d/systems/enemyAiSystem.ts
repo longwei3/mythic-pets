@@ -1,5 +1,6 @@
 import type { BossSkillType, EnemyState, Vec2 } from '@/features/adventure3d/core/types';
 import { ADVENTURE_MAP_BOUNDARY } from '@/features/adventure3d/config/gameBalance';
+import { resolvePositionWithCoralObstacles } from '@/features/adventure3d/systems/coralObstacleSystem';
 
 interface EnemyTickResult {
   enemies: EnemyState[];
@@ -105,13 +106,22 @@ function getEnemyCollisionRadius(enemy: EnemyState): number {
 function clampEnemyPosition(position: Vec2, radius: number): Vec2 {
   const limit = Math.max(2, ADVENTURE_MAP_BOUNDARY - radius);
   const dist = Math.hypot(position.x, position.z);
-  if (dist <= limit || dist <= 0.0001) {
-    return position;
+  const boundaryClamped =
+    dist <= limit || dist <= 0.0001
+      ? position
+      : {
+          x: position.x * (limit / dist),
+          z: position.z * (limit / dist),
+        };
+  const obstacleResolved = resolvePositionWithCoralObstacles(boundaryClamped, radius, 0.08);
+  const postDist = Math.hypot(obstacleResolved.x, obstacleResolved.z);
+  if (postDist <= limit || postDist <= 0.0001) {
+    return obstacleResolved;
   }
-  const ratio = limit / dist;
+  const ratio = limit / postDist;
   return {
-    x: position.x * ratio,
-    z: position.z * ratio,
+    x: obstacleResolved.x * ratio,
+    z: obstacleResolved.z * ratio,
   };
 }
 

@@ -12,6 +12,7 @@ import { playBreedSound } from '@/lib/sounds';
 import { localizePetName } from '@/lib/petNames';
 import { readActiveGatherTask } from '@/lib/magicPotions';
 import { normalizePetRarity, type PetRarity } from '@/lib/petRarity';
+import { getExpThresholdForLevel, resolveExpProgress, scaleBaseStatByLevel } from '@/lib/petProgression';
 
 type Element = 'gold' | 'wood' | 'water' | 'fire' | 'earth';
 type Gender = 'male' | 'female';
@@ -96,38 +97,46 @@ export default function Breed() {
         localStorage.removeItem(myPetsKey);
         return [];
       }
-      return parsed.map((p: any) => ({
-        ...p,
-        element: normalizeElements(p.element),
-        rarity: normalizePetRarity(p.rarity),
-        level: typeof p.level === 'number' && p.level > 0 ? p.level : 1,
-        attack: typeof p.attack === 'number' && p.attack > 0 ? p.attack : 15,
-        defense: typeof p.defense === 'number' && p.defense > 0 ? p.defense : 10,
-        maxHp:
-          typeof p.maxHp === 'number' && p.maxHp > 0
-            ? p.maxHp
-            : typeof p.hp === 'number' && p.hp > 0
-              ? p.hp
-              : 50,
-        hp:
-          typeof p.hp === 'number' && p.hp >= 0
-            ? p.hp
-            : typeof p.maxHp === 'number' && p.maxHp > 0
+      return parsed.map((p: any) => {
+        const expProgress = resolveExpProgress(
+          typeof p.level === 'number' && p.level > 0 ? p.level : 1,
+          typeof p.exp === 'number' ? p.exp : 0,
+        );
+        return {
+          ...p,
+          element: normalizeElements(p.element),
+          rarity: normalizePetRarity(p.rarity),
+          level: expProgress.level,
+          exp: expProgress.current,
+          maxExp: getExpThresholdForLevel(expProgress.level),
+          attack: typeof p.attack === 'number' && p.attack > 0 ? p.attack : 15,
+          defense: typeof p.defense === 'number' && p.defense > 0 ? p.defense : 10,
+          maxHp:
+            typeof p.maxHp === 'number' && p.maxHp > 0
               ? p.maxHp
-              : 50,
-        maxMp:
-          typeof p.maxMp === 'number' && p.maxMp > 0
-            ? p.maxMp
-            : typeof p.mp === 'number' && p.mp > 0
-              ? p.mp
-              : 30 + (typeof p.level === 'number' && p.level > 0 ? p.level : 1) * 5,
-        mp:
-          typeof p.mp === 'number' && p.mp >= 0
-            ? p.mp
-            : typeof p.maxMp === 'number' && p.maxMp > 0
+              : typeof p.hp === 'number' && p.hp > 0
+                ? p.hp
+                : scaleBaseStatByLevel(50, expProgress.level),
+          hp:
+            typeof p.hp === 'number' && p.hp >= 0
+              ? p.hp
+              : typeof p.maxHp === 'number' && p.maxHp > 0
+                ? p.maxHp
+                : scaleBaseStatByLevel(50, expProgress.level),
+          maxMp:
+            typeof p.maxMp === 'number' && p.maxMp > 0
               ? p.maxMp
-              : 30 + (typeof p.level === 'number' && p.level > 0 ? p.level : 1) * 5,
-      }));
+              : typeof p.mp === 'number' && p.mp > 0
+                ? p.mp
+                : scaleBaseStatByLevel(35, expProgress.level),
+          mp:
+            typeof p.mp === 'number' && p.mp >= 0
+              ? p.mp
+              : typeof p.maxMp === 'number' && p.maxMp > 0
+                ? p.maxMp
+                : scaleBaseStatByLevel(35, expProgress.level),
+        };
+      });
     } catch {
       localStorage.removeItem(myPetsKey);
       return [];

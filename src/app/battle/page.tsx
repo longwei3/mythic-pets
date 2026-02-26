@@ -27,6 +27,13 @@ import {
   stopBattleResultSound,
   stopBattleMusic,
 } from '@/lib/sounds';
+import {
+  applyExpGain,
+  applyStatGrowthByLevels,
+  getExpThresholdForLevel,
+  resolveExpProgress,
+  scaleBaseStatByLevel,
+} from '@/lib/petProgression';
 
 type Element = 'gold' | 'wood' | 'water' | 'fire' | 'earth';
 type Gender = 'male' | 'female';
@@ -73,14 +80,13 @@ const SPECIAL_SKILL_MP_COST = 20;
 const BATTLE_EXP_REWARD = 100;
 const BATTLE_LEVELUP_ATTACK_GAIN = 2;
 const BATTLE_LEVELUP_DEFENSE_GAIN = 2;
-const BATTLE_LEVELUP_HP_GAIN = 8;
-const BATTLE_LEVELUP_MP_GAIN = 4;
 
 interface BattleRewardProgression {
   levelUps: number;
   nextLevel: number;
   nextAttack: number;
   nextDefense: number;
+  nextHp: number;
   nextMaxHp: number;
   nextMaxMp: number;
   nextMp: number;
@@ -198,25 +204,26 @@ export default function Battle() {
 
   const normalizeStoredPet = (rawPet: any, index = 0): OwnedPet => {
     const level = typeof rawPet.level === 'number' && rawPet.level > 0 ? rawPet.level : 1;
+    const expProgress = resolveExpProgress(level, typeof rawPet.exp === 'number' ? rawPet.exp : 0);
     const maxHp =
       typeof rawPet.maxHp === 'number' && rawPet.maxHp > 0
         ? rawPet.maxHp
         : typeof rawPet.hp === 'number' && rawPet.hp > 0
           ? rawPet.hp
-          : 50;
+          : scaleBaseStatByLevel(50, expProgress.level);
     const maxMp =
       typeof rawPet.maxMp === 'number' && rawPet.maxMp > 0
         ? rawPet.maxMp
         : typeof rawPet.mp === 'number' && rawPet.mp > 0
           ? rawPet.mp
-          : 30 + level * 5;
+          : scaleBaseStatByLevel(35, expProgress.level);
 
     return {
       id: typeof rawPet.id === 'number' ? rawPet.id : index + 1,
       name: typeof rawPet.name === 'string' ? rawPet.name : 'Lobster',
       element: normalizeElements(rawPet.element),
       gender: rawPet.gender === 'female' ? 'female' : 'male',
-      level,
+      level: expProgress.level,
       hp: typeof rawPet.hp === 'number' && rawPet.hp >= 0 ? Math.min(rawPet.hp, maxHp) : maxHp,
       maxHp,
       mp: typeof rawPet.mp === 'number' && rawPet.mp >= 0 ? Math.min(rawPet.mp, maxMp) : maxMp,
@@ -259,6 +266,7 @@ export default function Battle() {
       nextLevel: currentPet.level,
       nextAttack: currentPet.attack,
       nextDefense: currentPet.defense,
+      nextHp: currentPet.hp,
       nextMaxHp: currentPet.maxHp,
       nextMaxMp: currentPet.maxMp,
       nextMp: currentPet.mp,
@@ -287,33 +295,41 @@ export default function Battle() {
 
         let level = typeof pet.level === 'number' && pet.level > 0 ? pet.level : currentPet.level;
         let exp = typeof pet.exp === 'number' && pet.exp >= 0 ? pet.exp : 0;
-        let maxExp = typeof pet.maxExp === 'number' && pet.maxExp > 0 ? pet.maxExp : 100;
+        const normalizedExp = resolveExpProgress(level, exp);
+        level = normalizedExp.level;
+        exp = normalizedExp.current;
+        let maxExp = getExpThresholdForLevel(level);
         let attack = typeof pet.attack === 'number' && pet.attack > 0 ? pet.attack : currentPet.attack;
         let defense = typeof pet.defense === 'number' && pet.defense > 0 ? pet.defense : currentPet.defense;
         let maxHp = typeof pet.maxHp === 'number' && pet.maxHp > 0 ? pet.maxHp : currentPet.maxHp;
         let maxMp = typeof pet.maxMp === 'number' && pet.maxMp > 0 ? pet.maxMp : currentPet.maxMp;
+        const hp = typeof pet.hp === 'number' && pet.hp >= 0 ? Math.min(pet.hp, maxHp) : maxHp;
+        const mp = typeof pet.mp === 'number' && pet.mp >= 0 ? Math.min(pet.mp, maxMp) : maxMp;
 
-        exp += Math.max(0, Math.floor(expReward));
-        let levelUps = 0;
+        const gained = applyExpGain(level, exp, expReward);
+        const levelUps = gained.levelUps;
+        level = gained.level;
+        exp = gained.exp;
+        maxExp = gained.nextExp;
 
-        while (exp >= maxExp) {
-          exp -= maxExp;
-          level += 1;
-          levelUps += 1;
-          maxExp = Math.max(100, Math.floor(maxExp * 1.2));
-          attack += BATTLE_LEVELUP_ATTACK_GAIN;
-          defense += BATTLE_LEVELUP_DEFENSE_GAIN;
-          maxHp += BATTLE_LEVELUP_HP_GAIN;
-          maxMp += BATTLE_LEVELUP_MP_GAIN;
+        if (levelUps > 0) {
+          attack += BATTLE_LEVELUP_ATTACK_GAIN * levelUps;
+          defense += BATTLE_LEVELUP_DEFENSE_GAIN * levelUps;
+          maxHp = applyStatGrowthByLevels(maxHp, levelUps);
+          maxMp = applyStatGrowthByLevels(maxMp, levelUps);
         }
 
-        const nextMp = Math.min(maxMp, Math.max(0, currentPet.mp + levelUps * BATTLE_LEVELUP_MP_GAIN));
+        const gainedHp = Math.max(0, maxHp - (typeof pet.maxHp === 'number' && pet.maxHp > 0 ? pet.maxHp : currentPet.maxHp));
+        const gainedMp = Math.max(0, maxMp - (typeof pet.maxMp === 'number' && pet.maxMp > 0 ? pet.maxMp : currentPet.maxMp));
+        const nextHp = Math.max(1, Math.min(maxHp, hp + gainedHp));
+        const nextMp = Math.max(0, Math.min(maxMp, mp + gainedMp));
 
         progression = {
           levelUps,
           nextLevel: level,
           nextAttack: attack,
           nextDefense: defense,
+          nextHp,
           nextMaxHp: maxHp,
           nextMaxMp: maxMp,
           nextMp,
@@ -326,7 +342,7 @@ export default function Battle() {
           maxExp,
           attack,
           defense,
-          hp: maxHp,
+          hp: nextHp,
           maxHp,
           mp: nextMp,
           maxMp,
@@ -628,7 +644,7 @@ export default function Battle() {
         attack: progression.nextAttack,
         defense: progression.nextDefense,
         maxHp: progression.nextMaxHp,
-        hp: Math.min(progression.nextMaxHp, current.hp + progression.levelUps * BATTLE_LEVELUP_HP_GAIN),
+        hp: progression.nextHp,
         maxMp: progression.nextMaxMp,
         mp: progression.nextMp,
       }));

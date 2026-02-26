@@ -263,9 +263,11 @@ export default {
   adventure3d: {
     title: '龙虾历险记（3D）',
     authRequired: '请先登录账号后进入 3D 冒险',
+    roleName: '角色名',
     balance: '$MYTH 余额',
     hp: '生命',
     energy: '能量',
+    exp: '经验值',
     zone: '区域',
     kills: '击败数',
     score: '评分',

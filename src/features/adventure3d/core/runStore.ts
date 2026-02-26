@@ -26,6 +26,7 @@ import type {
   Vec2,
 } from '@/features/adventure3d/core/types';
 import { type EnemyProjectileSpawn, updateEnemyAi } from '@/features/adventure3d/systems/enemyAiSystem';
+import { isPositionBlockedByCoral } from '@/features/adventure3d/systems/coralObstacleSystem';
 import { createGatherNodes, tryGatherAtPosition } from '@/features/adventure3d/systems/gatherSystem';
 import { mergeLoot, rollLootForEnemy } from '@/features/adventure3d/systems/lootSystem';
 import { stepPlayerMovement } from '@/features/adventure3d/systems/movementSystem';
@@ -546,6 +547,10 @@ function stepProjectiles(
 
     const outOfBounds = Math.hypot(nextPosition.x, nextPosition.z) > ADVENTURE_MAP_BOUNDARY + 2;
     if (outOfBounds) {
+      continue;
+    }
+
+    if (isPositionBlockedByCoral(nextPosition, projectile.radius)) {
       continue;
     }
 

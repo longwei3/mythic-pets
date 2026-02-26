@@ -7,6 +7,7 @@ import type { Group, Material, Mesh, Object3D } from 'three';
 import { Box3, Color, Vector3 } from 'three';
 import { getCheckpointPosition } from '@/features/adventure3d/core/runStore';
 import { ADVENTURE_MAP_BOUNDARY } from '@/features/adventure3d/config/gameBalance';
+import { CORAL_OBSTACLES } from '@/features/adventure3d/systems/coralObstacleSystem';
 import type {
   BossSkillType,
   CameraViewMode,
@@ -986,6 +987,54 @@ function GatherMeshes({ nodes }: { nodes: GatherNode[] }) {
   );
 }
 
+function CoralObstacleMeshes() {
+  const coralColors = ['#fb7185', '#f472b6', '#22d3ee', '#a78bfa', '#f97316'] as const;
+
+  return (
+    <group>
+      {CORAL_OBSTACLES.map((obstacle, index) => {
+        const color = coralColors[index % coralColors.length];
+        const branchCount = 3 + (index % 3);
+        return (
+          <group key={obstacle.id} position={[obstacle.position.x, 0, obstacle.position.z]} rotation={[0, index * 0.56, 0]}>
+            <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+              <circleGeometry args={[obstacle.radius * 1.03, 28]} />
+              <meshStandardMaterial color="#0f172a" roughness={0.98} transparent opacity={0.46} />
+            </mesh>
+
+            <mesh castShadow position={[0, obstacle.height * 0.34, 0]}>
+              <cylinderGeometry args={[obstacle.radius * 0.34, obstacle.radius * 0.46, obstacle.height * 0.68, 10]} />
+              <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.18} roughness={0.52} />
+            </mesh>
+
+            <mesh castShadow position={[0, obstacle.height * 0.78, 0]}>
+              <sphereGeometry args={[obstacle.radius * 0.36, 12, 12]} />
+              <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.22} roughness={0.45} />
+            </mesh>
+
+            {Array.from({ length: branchCount }, (_, branchIndex) => {
+              const angle = (Math.PI * 2 * branchIndex) / branchCount + index * 0.3;
+              const reach = obstacle.radius * (0.28 + (branchIndex % 2) * 0.17);
+              const lift = obstacle.height * (0.42 + (branchIndex % 3) * 0.08);
+              const size = obstacle.radius * (0.1 + (branchIndex % 2) * 0.04);
+              return (
+                <mesh
+                  key={`${obstacle.id}-branch-${branchIndex}`}
+                  castShadow
+                  position={[Math.cos(angle) * reach, lift, Math.sin(angle) * reach]}
+                >
+                  <sphereGeometry args={[size, 10, 10]} />
+                  <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.26} roughness={0.4} />
+                </mesh>
+              );
+            })}
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
 function ProjectileMeshes({ projectiles }: { projectiles: ProjectileState[] }) {
   return (
     <group>
@@ -1139,6 +1188,7 @@ export default function AdventureScene({
 
         <ZoneRings activeZone={zone} />
         <CheckpointBeacon checkpointZone={checkpointZone} />
+        <CoralObstacleMeshes />
         <EnemyGroundProjections enemies={enemies} deadMarks={enemyProjectionMarks} />
         <PlayerAvatar player={player} />
         <EnemyMeshes enemies={enemies} activeTargetId={activeTargetId} />

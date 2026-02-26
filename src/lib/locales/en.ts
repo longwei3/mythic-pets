@@ -263,9 +263,11 @@ export default {
   adventure3d: {
     title: 'Lobster Adventure (3D)',
     authRequired: 'Please sign in before entering 3D adventure mode',
+    roleName: 'Role',
     balance: '$MYTH Balance',
     hp: 'HP',
     energy: 'Energy',
+    exp: 'EXP',
     zone: 'Zone',
     kills: 'Kills',
     score: 'Score',
