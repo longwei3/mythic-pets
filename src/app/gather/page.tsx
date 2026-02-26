@@ -232,6 +232,9 @@ export default function GatherPage() {
             <Link href="/gather" className="text-indigo-400 hover:text-indigo-300">
               {t('nav.gather')}
             </Link>
+            <Link href="/adventure3d" className="text-slate-400 hover:text-white">
+              🌊 {t('nav.adventure')}
+            </Link>
             <Link href="/market" className="text-slate-400 hover:text-white">
               🏪 {t('nav.market')}
             </Link>

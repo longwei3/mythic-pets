@@ -6,6 +6,15 @@ import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import AuthStatus from '@/components/AuthStatus';
 import { useAuth } from '@/components/AuthProvider';
+import {
+  playAuthUiEffect,
+  playClickSound,
+  playSound,
+  startAuthShowcaseEffects,
+  startAuthShowcaseMusic,
+  stopAuthShowcaseEffects,
+  stopAuthShowcaseMusic,
+} from '@/lib/sounds';
 import { localizePetName } from '@/lib/petNames';
 import { formatCooldownTimer } from '@/lib/battleCooldown';
 import { readActiveGatherTask, type GatherTask } from '@/lib/magicPotions';
@@ -69,12 +78,64 @@ const showcasePets: ShowcasePet[] = [
   },
 ];
 
+const homeShowcaseOrbs = [
+  {
+    left: '10%',
+    top: '16%',
+    size: 260,
+    duration: 16,
+    pulse: 5.4,
+    delay: 0,
+    color: 'rgba(56, 189, 248, 0.24)',
+    glow: 'rgba(56, 189, 248, 0.34)',
+  },
+  {
+    left: '75%',
+    top: '14%',
+    size: 230,
+    duration: 14,
+    pulse: 4.8,
+    delay: 1.2,
+    color: 'rgba(167, 139, 250, 0.22)',
+    glow: 'rgba(167, 139, 250, 0.3)',
+  },
+  {
+    left: '18%',
+    top: '72%',
+    size: 220,
+    duration: 17,
+    pulse: 5.7,
+    delay: 0.8,
+    color: 'rgba(45, 212, 191, 0.18)',
+    glow: 'rgba(45, 212, 191, 0.28)',
+  },
+  {
+    left: '82%',
+    top: '68%',
+    size: 260,
+    duration: 15,
+    pulse: 5.2,
+    delay: 2.1,
+    color: 'rgba(59, 130, 246, 0.16)',
+    glow: 'rgba(99, 102, 241, 0.26)',
+  },
+];
+
+const homeFloatingLobsters = [
+  { left: '12%', top: '30%', size: 44, duration: 9.4, delay: 0.2 },
+  { left: '86%', top: '28%', size: 36, duration: 10.1, delay: 1.2 },
+  { left: '20%', top: '80%', size: 32, duration: 11.2, delay: 0.7 },
+  { left: '80%', top: '74%', size: 46, duration: 8.8, delay: 2.2 },
+];
+
 export default function Home() {
   const { t } = useTranslation();
   const { isAuthenticated, username } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [gatherTask, setGatherTask] = useState<GatherTask | null>(null);
   const [nowMs, setNowMs] = useState(Date.now());
+  const [musicEnabled, setMusicEnabled] = useState(true);
+  const [fxEnabled, setFxEnabled] = useState(true);
 
   useEffect(() => {
     setMounted(true);
@@ -96,39 +157,153 @@ export default function Home() {
     return () => clearInterval(timer);
   }, [isAuthenticated, mounted, username]);
 
+  useEffect(() => {
+    const unlockAudio = () => {
+      if (musicEnabled) {
+        startAuthShowcaseMusic();
+      }
+      if (fxEnabled) {
+        startAuthShowcaseEffects();
+      }
+    };
+
+    if (musicEnabled) {
+      startAuthShowcaseMusic();
+    } else {
+      stopAuthShowcaseMusic();
+    }
+
+    if (fxEnabled) {
+      startAuthShowcaseEffects();
+    } else {
+      stopAuthShowcaseEffects();
+    }
+
+    window.addEventListener('pointerdown', unlockAudio, { passive: true });
+    window.addEventListener('keydown', unlockAudio);
+
+    return () => {
+      window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+      stopAuthShowcaseMusic();
+      stopAuthShowcaseEffects();
+    };
+  }, [fxEnabled, musicEnabled]);
+
+  const playHoverFx = () => {
+    if (!fxEnabled) {
+      return;
+    }
+    playSound('hover');
+  };
+
+  const playSwitchFx = () => {
+    if (!fxEnabled) {
+      return;
+    }
+    playClickSound();
+    playAuthUiEffect('switch');
+  };
+
+  const renderHomeShowcaseBackground = () => (
+    <>
+      <div className="auth-showcase-bg pointer-events-none" />
+      <div className="auth-grid-overlay pointer-events-none" />
+      <div className="auth-scanline pointer-events-none" />
+      {homeShowcaseOrbs.map((orb, index) => (
+        <span
+          key={`home-orb-${index}`}
+          className="auth-orb"
+          style={{
+            left: orb.left,
+            top: orb.top,
+            width: `${orb.size}px`,
+            height: `${orb.size}px`,
+            background: orb.color,
+            boxShadow: `0 0 52px ${orb.glow}`,
+            animationDuration: `${orb.duration}s, ${orb.pulse}s`,
+            animationDelay: `${orb.delay}s, ${orb.delay * 0.45}s`,
+          }}
+        />
+      ))}
+      {homeFloatingLobsters.map((item, index) => (
+        <span
+          key={`home-lobster-${index}`}
+          className="auth-lobster-float"
+          style={{
+            left: item.left,
+            top: item.top,
+            fontSize: `${item.size}px`,
+            animationDuration: `${item.duration}s, 4.4s`,
+            animationDelay: `${item.delay}s, ${item.delay * 0.5}s`,
+          }}
+        >
+          🦞
+        </span>
+      ))}
+    </>
+  );
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-900">
-      <header className="flex items-center justify-between px-6 py-4">
+    <div className="min-h-screen relative overflow-hidden bg-slate-950">
+      {renderHomeShowcaseBackground()}
+      <header className="relative z-10 flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-2">
-          <span className="text-3xl">🦞</span>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+          <span className="text-3xl drop-shadow-[0_0_14px_rgba(99,102,241,0.65)]">🦞</span>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-300 via-indigo-300 to-fuchsia-300 bg-clip-text text-transparent">
             {t('common.appName')}
           </h1>
         </div>
         <nav className="flex gap-4">
-          <Link href="/dashboard" className="text-slate-400 hover:text-white">
+          <Link href="/dashboard" onMouseEnter={playHoverFx} onClick={playSwitchFx} className="text-slate-300 hover:text-white">
             {t('nav.dashboard')}
           </Link>
-          <Link href="/battle" className="text-slate-400 hover:text-white">
+          <Link href="/battle" onMouseEnter={playHoverFx} onClick={playSwitchFx} className="text-slate-300 hover:text-white">
             {t('nav.battle')}
           </Link>
-          <Link href="/breed" className="text-slate-400 hover:text-white">
+          <Link href="/breed" onMouseEnter={playHoverFx} onClick={playSwitchFx} className="text-slate-300 hover:text-white">
             {t('nav.breed')}
           </Link>
-          <Link href="/gather" className="text-slate-400 hover:text-white">
+          <Link href="/gather" onMouseEnter={playHoverFx} onClick={playSwitchFx} className="text-slate-300 hover:text-white">
             {t('nav.gather')}
           </Link>
-          <Link href="/market" className="text-slate-400 hover:text-white">
+          <Link href="/adventure3d" onMouseEnter={playHoverFx} onClick={playSwitchFx} className="text-slate-300 hover:text-white">
+            🌊 {t('nav.adventure')}
+          </Link>
+          <Link href="/market" onMouseEnter={playHoverFx} onClick={playSwitchFx} className="text-slate-300 hover:text-white">
             🏪 {t('nav.market')}
           </Link>
         </nav>
         <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => {
+              setMusicEnabled((prev) => !prev);
+              playSwitchFx();
+            }}
+            onMouseEnter={playHoverFx}
+            className="px-3 py-2 rounded-lg bg-slate-800/70 border border-slate-600 hover:border-cyan-400 text-xs sm:text-sm"
+          >
+            {musicEnabled ? `🎹 ${t('landing.musicOn')}` : `🔇 ${t('landing.musicOff')}`}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setFxEnabled((prev) => !prev);
+              playClickSound();
+              playAuthUiEffect('switch');
+            }}
+            onMouseEnter={playHoverFx}
+            className="px-3 py-2 rounded-lg bg-slate-800/70 border border-slate-600 hover:border-fuchsia-400 text-xs sm:text-sm"
+          >
+            {fxEnabled ? `✨ ${t('landing.fxOn')}` : `🔕 ${t('landing.fxOff')}`}
+          </button>
           <LanguageSwitcher />
           {mounted && <AuthStatus />}
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-16">
+      <main className="relative z-10 container mx-auto px-4 py-16">
         <div className="text-center mb-16">
           <h2 className="text-5xl md:text-7xl font-bold mb-6 bg-gradient-to-r from-indigo-400 via-purple-400 to-amber-400 bg-clip-text text-transparent">
             {t('landing.title')}
@@ -139,6 +314,7 @@ export default function Home() {
           <p className="text-lg text-slate-400 max-w-2xl mx-auto mb-8">
             {t('landing.description')}
           </p>
+          <p className="text-xs text-cyan-200/90 mb-8">{t('landing.musicHint')}</p>
           {isAuthenticated && gatherTask && (
             <div className="max-w-2xl mx-auto mb-6 p-4 rounded-xl border border-cyan-500/40 bg-cyan-500/10">
               <p className="text-cyan-200 text-sm">
@@ -151,6 +327,8 @@ export default function Home() {
               <div className="mt-3">
                 <Link
                   href="/gather"
+                  onMouseEnter={playHoverFx}
+                  onClick={playSwitchFx}
                   className="inline-block px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-sm font-semibold"
                 >
                   {t('nav.gather')}
@@ -161,6 +339,8 @@ export default function Home() {
           {isAuthenticated ? (
             <Link
               href="/dashboard"
+              onMouseEnter={playHoverFx}
+              onClick={playSwitchFx}
               className="inline-block px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full text-xl font-semibold hover:from-indigo-500 hover:to-purple-500 transition-all transform hover:scale-105"
             >
               {t('landing.getStarted')} →
@@ -168,6 +348,8 @@ export default function Home() {
           ) : (
             <Link
               href="/auth?next=%2Fdashboard"
+              onMouseEnter={playHoverFx}
+              onClick={playSwitchFx}
               className="inline-block px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full text-xl font-semibold hover:from-indigo-500 hover:to-purple-500 transition-all transform hover:scale-105"
             >
               {t('auth.loginOrRegister')} →
@@ -269,7 +451,7 @@ export default function Home() {
         </div>
       </main>
 
-      <footer className="text-center py-8 text-slate-500">
+      <footer className="relative z-10 text-center py-8 text-slate-500">
         <p>{t('landing.footer')}</p>
       </footer>
     </div>

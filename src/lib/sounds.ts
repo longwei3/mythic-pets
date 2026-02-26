@@ -29,6 +29,15 @@ let isAuthShowcasePlaying = false;
 let authShowcaseFxGain: GainNode | null = null;
 let authShowcaseFxTimer: number | null = null;
 let isAuthShowcaseFxPlaying = false;
+let adventureBgmGain: GainNode | null = null;
+let adventureBgmOscillators: OscillatorNode[] = [];
+let adventureBgmLfo: OscillatorNode | null = null;
+let isAdventureBgmPlaying = false;
+let adventureWaterGain: GainNode | null = null;
+let adventureWaterFilter: BiquadFilterNode | null = null;
+let adventureWaterOscillators: OscillatorNode[] = [];
+let adventureWaterLfo: OscillatorNode | null = null;
+let isAdventureWaterPlaying = false;
 
 type AuthUiEffect = 'switch' | 'success' | 'error' | 'sparkle';
 
@@ -748,4 +757,299 @@ export function playBreedSound(): void {
 
 export function playClickSound(): void {
   playSound('click');
+}
+
+export function startAdventureBgm(): void {
+  if (isAdventureBgmPlaying) {
+    return;
+  }
+
+  try {
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+
+    adventureBgmGain = ctx.createGain();
+    const now = ctx.currentTime;
+    adventureBgmGain.gain.setValueAtTime(0.0001, now);
+    adventureBgmGain.gain.exponentialRampToValueAtTime(0.06, now + 1.4);
+    adventureBgmGain.connect(ctx.destination);
+
+    const bass = ctx.createOscillator();
+    bass.type = 'sine';
+    bass.frequency.value = 130.81;
+    const bassGain = ctx.createGain();
+    bassGain.gain.value = 0.38;
+
+    const pad = ctx.createOscillator();
+    pad.type = 'triangle';
+    pad.frequency.value = 174.61;
+    const padGain = ctx.createGain();
+    padGain.gain.value = 0.2;
+
+    const lead = ctx.createOscillator();
+    lead.type = 'sine';
+    lead.frequency.value = 261.63;
+    const leadGain = ctx.createGain();
+    leadGain.gain.value = 0.11;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 900;
+    filter.Q.value = 0.7;
+
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 0.06;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 0.006;
+
+    lfo.connect(lfoGain);
+    lfoGain.connect(adventureBgmGain.gain);
+
+    bass.connect(bassGain);
+    pad.connect(padGain);
+    lead.connect(leadGain);
+    bassGain.connect(filter);
+    padGain.connect(filter);
+    leadGain.connect(filter);
+    filter.connect(adventureBgmGain);
+
+    bass.start();
+    pad.start();
+    lead.start();
+    lfo.start();
+
+    adventureBgmOscillators = [bass, pad, lead];
+    adventureBgmLfo = lfo;
+    isAdventureBgmPlaying = true;
+  } catch {
+    console.log('Background music not available');
+  }
+}
+
+export function stopAdventureBgm(): void {
+  if (!isAdventureBgmPlaying) {
+    return;
+  }
+
+  for (const oscillator of adventureBgmOscillators) {
+    try {
+      oscillator.stop();
+    } catch {
+      // ignore
+    }
+  }
+  adventureBgmOscillators = [];
+
+  if (adventureBgmLfo) {
+    try {
+      adventureBgmLfo.stop();
+    } catch {
+      // ignore
+    }
+  }
+  adventureBgmLfo = null;
+
+  if (adventureBgmGain) {
+    try {
+      adventureBgmGain.disconnect();
+    } catch {
+      // ignore
+    }
+  }
+  adventureBgmGain = null;
+  isAdventureBgmPlaying = false;
+}
+
+export function playAdventureActionSfx(type: 'attack' | 'gather' | 'victory' | 'defeat'): void {
+  switch (type) {
+    case 'gather':
+      playTone(415.3, 0.2, 0.035, 'sine');
+      setTimeout(() => playTone(523.25, 0.26, 0.03, 'sine'), 120);
+      break;
+    case 'victory':
+      playTone(659.25, 0.36, 0.045, 'triangle');
+      setTimeout(() => playTone(783.99, 0.4, 0.04, 'triangle'), 150);
+      setTimeout(() => playTone(987.77, 0.5, 0.04, 'sine'), 320);
+      break;
+    case 'defeat':
+      playTone(329.63, 0.35, 0.04, 'triangle');
+      setTimeout(() => playTone(246.94, 0.46, 0.036, 'triangle'), 180);
+      break;
+    case 'attack':
+    default:
+      playTone(220, 0.16, 0.028, 'sine');
+      break;
+  }
+}
+
+type AdventureCreatureKind = 'scout' | 'hunter' | 'crusher' | 'boss';
+type AdventureCreatureEvent = 'attack' | 'hit';
+
+function playCreatureAttackTone(kind: AdventureCreatureKind): void {
+  if (kind === 'boss') {
+    playTone(112, 0.28, 0.04, 'triangle');
+    setTimeout(() => playTone(146.83, 0.24, 0.036, 'sawtooth'), 90);
+    return;
+  }
+  if (kind === 'crusher') {
+    playTone(165, 0.22, 0.032, 'triangle');
+    setTimeout(() => playTone(196, 0.2, 0.028, 'sawtooth'), 70);
+    return;
+  }
+  if (kind === 'hunter') {
+    playTone(262, 0.2, 0.024, 'sine');
+    setTimeout(() => playTone(349, 0.14, 0.021, 'sine'), 60);
+    return;
+  }
+  playTone(220, 0.16, 0.022, 'sine');
+  setTimeout(() => playTone(293.66, 0.12, 0.018, 'triangle'), 45);
+}
+
+function playCreatureHitTone(kind: AdventureCreatureKind): void {
+  if (kind === 'boss') {
+    playTone(98, 0.26, 0.036, 'triangle');
+    setTimeout(() => playTone(123.47, 0.18, 0.03, 'triangle'), 80);
+    return;
+  }
+  if (kind === 'crusher') {
+    playTone(147, 0.18, 0.03, 'triangle');
+    setTimeout(() => playTone(185, 0.14, 0.024, 'sawtooth'), 65);
+    return;
+  }
+  if (kind === 'hunter') {
+    playTone(246.94, 0.14, 0.02, 'sine');
+    setTimeout(() => playTone(311.13, 0.12, 0.018, 'sine'), 45);
+    return;
+  }
+  playTone(196, 0.12, 0.02, 'triangle');
+}
+
+export function playAdventureCreatureSfx(kind: AdventureCreatureKind, event: AdventureCreatureEvent): void {
+  if (event === 'hit') {
+    playCreatureHitTone(kind);
+    return;
+  }
+  playCreatureAttackTone(kind);
+}
+
+export function startAdventureWaterAmbience(): void {
+  if (isAdventureWaterPlaying) {
+    return;
+  }
+
+  try {
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+
+    adventureWaterGain = ctx.createGain();
+    const now = ctx.currentTime;
+    adventureWaterGain.gain.setValueAtTime(0.0001, now);
+    adventureWaterGain.gain.exponentialRampToValueAtTime(0.018, now + 1.8);
+
+    adventureWaterFilter = ctx.createBiquadFilter();
+    adventureWaterFilter.type = 'lowpass';
+    adventureWaterFilter.frequency.value = 560;
+    adventureWaterFilter.Q.value = 0.44;
+
+    const waveLow = ctx.createOscillator();
+    waveLow.type = 'triangle';
+    waveLow.frequency.value = 58;
+    const waveLowGain = ctx.createGain();
+    waveLowGain.gain.value = 0.42;
+
+    const waveMid = ctx.createOscillator();
+    waveMid.type = 'sine';
+    waveMid.frequency.value = 96;
+    const waveMidGain = ctx.createGain();
+    waveMidGain.gain.value = 0.18;
+
+    const hiss = ctx.createOscillator();
+    hiss.type = 'sawtooth';
+    hiss.frequency.value = 184;
+    const hissGain = ctx.createGain();
+    hissGain.gain.value = 0.05;
+
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 0.08;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 0.0045;
+    lfo.connect(lfoGain);
+    lfoGain.connect(adventureWaterGain.gain);
+
+    waveLow.connect(waveLowGain);
+    waveMid.connect(waveMidGain);
+    hiss.connect(hissGain);
+    waveLowGain.connect(adventureWaterFilter);
+    waveMidGain.connect(adventureWaterFilter);
+    hissGain.connect(adventureWaterFilter);
+    adventureWaterFilter.connect(adventureWaterGain);
+    adventureWaterGain.connect(ctx.destination);
+
+    waveLow.start();
+    waveMid.start();
+    hiss.start();
+    lfo.start();
+
+    adventureWaterOscillators = [waveLow, waveMid, hiss];
+    adventureWaterLfo = lfo;
+    isAdventureWaterPlaying = true;
+  } catch {
+    console.log('Water ambience not available');
+  }
+}
+
+export function stopAdventureWaterAmbience(): void {
+  if (!isAdventureWaterPlaying) {
+    return;
+  }
+
+  for (const oscillator of adventureWaterOscillators) {
+    try {
+      oscillator.stop();
+    } catch {
+      // ignore
+    }
+  }
+  adventureWaterOscillators = [];
+
+  if (adventureWaterLfo) {
+    try {
+      adventureWaterLfo.stop();
+    } catch {
+      // ignore
+    }
+  }
+  adventureWaterLfo = null;
+
+  if (adventureWaterFilter) {
+    try {
+      adventureWaterFilter.disconnect();
+    } catch {
+      // ignore
+    }
+  }
+  adventureWaterFilter = null;
+
+  if (adventureWaterGain) {
+    try {
+      adventureWaterGain.disconnect();
+    } catch {
+      // ignore
+    }
+  }
+  adventureWaterGain = null;
+  isAdventureWaterPlaying = false;
+}
+
+export function playAdventureEdgeWaveSfx(intensity = 1): void {
+  const factor = Math.max(0.35, Math.min(1.6, intensity));
+  playTone(132 - factor * 12, 0.24 + factor * 0.12, 0.02 + factor * 0.014, 'triangle');
+  setTimeout(() => playTone(198 - factor * 10, 0.16 + factor * 0.08, 0.014 + factor * 0.01, 'sine'), 80);
+  setTimeout(() => playTone(286 - factor * 6, 0.11 + factor * 0.05, 0.009 + factor * 0.006, 'sine'), 150);
 }

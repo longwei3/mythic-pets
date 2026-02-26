@@ -365,3 +365,170 @@ Version: wagmi@2.19.5
  GET / 200 in 26ms (compile: 7ms, render: 19ms)
  GET /auth?next=%2F 200 in 25ms (compile: 8ms, render: 18ms)
  GET / 200 in 67ms (compile: 19ms, render: 49ms)
+ GET / 200 in 61ms (compile: 30ms, render: 31ms)
+ GET / 200 in 54ms (compile: 4ms, render: 50ms)
+ GET /auth?next=%2F 200 in 47ms (compile: 15ms, render: 31ms)
+ GET / 200 in 50ms (compile: 15ms, render: 36ms)
+ GET / 200 in 25ms (compile: 8ms, render: 17ms)
+✓ Compiled in 406ms
+✓ Compiled in 52ms
+✓ Compiled in 19ms
+ HEAD / 200 in 153ms (compile: 70ms, render: 83ms)
+ GET / 200 in 66ms (compile: 13ms, render: 53ms)
+ GET /auth?next=%2F 200 in 110ms (compile: 91ms, render: 19ms)
+ GET / 200 in 75ms (compile: 35ms, render: 40ms)
+ GET / 200 in 48ms (compile: 5ms, render: 43ms)
+ GET /auth?next=%2F 200 in 28ms (compile: 6ms, render: 21ms)
+ GET / 200 in 31ms (compile: 6ms, render: 25ms)
+ GET /battle 200 in 170ms (compile: 133ms, render: 37ms)
+ GET /dashboard 200 in 74ms (compile: 61ms, render: 13ms)
+ GET /battle 200 in 21ms (compile: 3ms, render: 17ms)
+ GET /breed 200 in 158ms (compile: 143ms, render: 15ms)
+ GET /gather 200 in 86ms (compile: 66ms, render: 19ms)
+ GET /market 200 in 107ms (compile: 94ms, render: 13ms)
+ GET /gather 200 in 41ms (compile: 20ms, render: 21ms)
+ GET /breed 200 in 38ms (compile: 5ms, render: 33ms)
+ GET /dashboard 200 in 25ms (compile: 9ms, render: 16ms)
+ GET / 200 in 64ms (compile: 33ms, render: 31ms)
+ GET / 200 in 60ms (compile: 8ms, render: 53ms)
+ HEAD /adventure3d 200 in 3.1s (compile: 2.7s, render: 384ms)
+ HEAD /adventure3d 200 in 962ms (compile: 557ms, render: 405ms)
+ GET /adventure3d 200 in 145ms (compile: 31ms, render: 114ms)
+ GET /auth 200 in 126ms (compile: 109ms, render: 17ms)
+ GET /dashboard 200 in 153ms (compile: 112ms, render: 41ms)
+ GET /adventure3d 200 in 40ms (compile: 21ms, render: 19ms)
+✓ Compiled in 182ms
+✓ Compiled in 57ms
+✓ Compiled in 39ms
+✓ Compiled in 80ms
+✓ Compiled in 26ms
+ GET /adventure3d 200 in 462ms (compile: 194ms, render: 268ms)
+ GET /adventure3d 200 in 79ms (compile: 17ms, render: 62ms)
+✓ Compiled in 109ms
+ GET /adventure3d 200 in 457ms (compile: 116ms, render: 341ms)
+✓ Compiled in 151ms
+✓ Compiled in 36ms
+✓ Compiled in 31ms
+✓ Compiled in 21ms
+ GET /adventure3d 200 in 273ms (compile: 73ms, render: 199ms)
+✓ Compiled in 72ms
+✓ Compiled in 28ms
+✓ Compiled in 235ms
+✓ Compiled in 25ms
+✓ Compiled in 72ms
+✓ Compiled in 64ms
+✓ Compiled in 22ms
+✓ Compiled in 61ms
+✓ Compiled in 23ms
+✓ Compiled in 41ms
+✓ Compiled in 134ms
+✓ Compiled in 152ms
+✓ Compiled in 204ms
+ GET /adventure3d 200 in 307ms (compile: 81ms, render: 226ms)
+✓ Compiled in 85ms
+✓ Compiled in 31ms
+✓ Compiled in 30ms
+✓ Compiled in 29ms
+✓ Compiled in 28ms
+✓ Compiled in 76ms
+✓ Compiled in 28ms
+✓ Compiled in 39ms
+✓ Compiled in 41ms
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+✓ Compiled in 37ms
+ GET /adventure3d 200 in 370ms (compile: 137ms, render: 233ms)
+✓ Compiled in 34ms
+✓ Compiled in 24ms
+ GET /adventure3d 200 in 309ms (compile: 121ms, render: 188ms)
+✓ Compiled in 86ms
+✓ Compiled in 39ms
+✓ Compiled in 70ms
+✓ Compiled in 76ms
+✓ Compiled in 90ms
+✓ Compiled in 26ms
+ GET /adventure3d 200 in 497ms (compile: 124ms, render: 373ms)
+✓ Compiled in 26ms
+✓ Compiled in 18ms
+✓ Compiled in 34ms
+✓ Compiled in 27ms
+✓ Compiled in 216ms
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+✓ Compiled in 160ms
+ GET /adventure3d 200 in 844ms (compile: 386ms, render: 459ms)
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+✓ Compiled in 122ms
+ GET /adventure3d 200 in 328ms (compile: 112ms, render: 216ms)
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+✓ Compiled in 115ms
+ GET /adventure3d 200 in 337ms (compile: 103ms, render: 234ms)
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+✓ Compiled in 101ms
+ GET /adventure3d 200 in 329ms (compile: 86ms, render: 242ms)
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+✓ Compiled in 67ms
+ GET /adventure3d 200 in 367ms (compile: 78ms, render: 289ms)
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+✓ Compiled in 40ms
+ GET /adventure3d 200 in 222ms (compile: 58ms, render: 164ms)
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+✓ Compiled in 71ms
+ GET /adventure3d 200 in 258ms (compile: 75ms, render: 183ms)
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+✓ Compiled in 64ms
+ GET /adventure3d 200 in 367ms (compile: 129ms, render: 238ms)
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+✓ Compiled in 178ms
+ GET /adventure3d 200 in 430ms (compile: 80ms, render: 350ms)
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+✓ Compiled in 159ms
+ GET /adventure3d 200 in 341ms (compile: 115ms, render: 226ms)
+✓ Compiled in 109ms
+✓ Compiled in 30ms
+✓ Compiled in 33ms
+✓ Compiled in 39ms
+✓ Compiled in 36ms
+ GET /adventure3d 200 in 492ms (compile: 186ms, render: 306ms)
+✓ Compiled in 85ms
+✓ Compiled in 35ms
+✓ Compiled in 21ms
+✓ Compiled in 80ms
+✓ Compiled in 44ms
+✓ Compiled in 102ms
+✓ Compiled in 74ms
+✓ Compiled in 125ms
+✓ Compiled in 44ms
+✓ Compiled in 40ms
+✓ Compiled in 222ms
+ GET /adventure3d 200 in 1138ms (compile: 290ms, render: 848ms)
+✓ Compiled in 193ms
+✓ Compiled in 125ms
+✓ Compiled in 79ms
+✓ Compiled in 155ms
+✓ Compiled in 142ms
+✓ Compiled in 73ms
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+✓ Compiled in 93ms
+ GET /adventure3d 200 in 563ms (compile: 169ms, render: 394ms)
+ GET /adventure3d 200 in 105ms (compile: 25ms, render: 80ms)
+✓ Compiled in 117ms
+✓ Compiled in 37ms
+ GET / 200 in 117ms (compile: 85ms, render: 32ms)
+✓ Compiled in 58ms
+✓ Compiled in 76ms
+✓ Compiled in 50ms
+✓ Compiled in 615ms
+✓ Compiled in 115ms
+✓ Compiled in 95ms
+✓ Compiled in 89ms
+ GET /adventure3d 200 in 1319ms (compile: 388ms, render: 930ms)
+✓ Compiled in 246ms
+ GET /adventure3d 200 in 1222ms (compile: 553ms, render: 669ms)
+✓ Compiled in 230ms
+✓ Compiled in 222ms
+✓ Compiled in 147ms
+ GET /adventure3d 200 in 662ms (compile: 317ms, render: 345ms)
+ GET /adventure3d 200 in 253ms (compile: 126ms, render: 128ms)
+ GET / 200 in 346ms (compile: 266ms, render: 80ms)
+ GET / 200 in 44ms (compile: 4ms, render: 39ms)
+ GET / 200 in 46ms (compile: 6ms, render: 40ms)
+ GET / 200 in 34ms (compile: 4ms, render: 31ms)

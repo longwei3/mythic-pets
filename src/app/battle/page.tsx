@@ -697,6 +697,9 @@ export default function Battle() {
             <Link href="/gather" className="text-slate-400 hover:text-white">
               {t('nav.gather')}
             </Link>
+            <Link href="/adventure3d" className="text-slate-400 hover:text-white">
+              🌊 {t('nav.adventure')}
+            </Link>
             <Link href="/market" className="text-slate-400 hover:text-white">
               🏪 {t('nav.market')}
             </Link>
