@@ -6,6 +6,7 @@ import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import AuthStatus from '@/components/AuthStatus';
 import RequireAuth from '@/components/RequireAuth';
+import GlobalMythChip from '@/components/GlobalMythChip';
 import { useAuth } from '@/components/AuthProvider';
 import { getScopedStorageKey } from '@/lib/auth';
 import { playBreedSound } from '@/lib/sounds';
@@ -49,8 +50,9 @@ const genderColors: Record<Gender, { text: string; bg: string }> = {
 };
 
 const BREEDING_TIME_SECONDS = 4 * 60 * 60;
-const DEMO_MODE = true;
+const DEMO_MODE = false;
 const DEMO_BREEDING_TIME = 10;
+const BREED_MIN_LEVEL = 5;
 
 export default function Breed() {
   const { t, i18n } = useTranslation();
@@ -188,6 +190,9 @@ export default function Breed() {
     }
     if (first.gender === second.gender) {
       return 'breed.ruleMaleFemale';
+    }
+    if (first.level < BREED_MIN_LEVEL || second.level < BREED_MIN_LEVEL) {
+      return 'breed.ruleMinLevel';
     }
     return null;
   })();
@@ -377,13 +382,16 @@ export default function Breed() {
       <div className="pointer-events-none absolute top-1/3 -right-20 h-80 w-80 rounded-full bg-fuchsia-400/20 blur-3xl animate-pulse [animation-delay:400ms]" />
       <div className="pointer-events-none absolute -bottom-28 left-1/2 h-80 w-[32rem] -translate-x-1/2 rounded-full bg-rose-400/10 blur-3xl" />
 
-      <header className="relative z-10 flex items-center justify-between px-6 py-4 bg-slate-900/45 border-b border-pink-400/15 backdrop-blur-sm">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">🦞</span>
-            <span className="text-xl font-bold text-white">{t('common.appName')}</span>
-          </Link>
-          <nav className="flex gap-4 ml-8">
+      <header className="relative z-10 flex items-start justify-between px-6 py-4 bg-slate-900/45 border-b border-pink-400/15 backdrop-blur-sm">
+        <div className="flex items-start gap-4">
+          <div className="flex flex-col items-start gap-2">
+            <Link href="/" className="flex items-center gap-2">
+              <span className="text-2xl">🦞</span>
+              <span className="text-xl font-bold text-white">{t('common.appName')}</span>
+            </Link>
+            <GlobalMythChip floating={false} />
+          </div>
+          <nav className="flex gap-4 ml-4 mt-1">
             <Link href="/dashboard" className="text-slate-400 hover:text-white">
               {t('nav.dashboard')}
             </Link>
@@ -412,14 +420,6 @@ export default function Breed() {
 
       <main className="relative z-10 container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold text-white text-center mb-8">🐣 {t('breed.title')}</h1>
-
-        {DEMO_MODE && (
-          <div className="text-center mb-4">
-            <span className="px-4 py-2 bg-yellow-500/20 text-yellow-400 rounded-full text-sm">
-              {t('breed.demoWarning', { demo: demoDurationLabel, live: liveDurationLabel })}
-            </span>
-          </div>
-        )}
 
         <div className="max-w-2xl mx-auto">
           <p className="text-center text-slate-400 mb-8">

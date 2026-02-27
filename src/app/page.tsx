@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import AuthStatus from '@/components/AuthStatus';
+import GlobalMythChip from '@/components/GlobalMythChip';
 import { useAuth } from '@/components/AuthProvider';
 import {
   playAuthUiEffect,
@@ -134,8 +135,7 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [gatherTask, setGatherTask] = useState<GatherTask | null>(null);
   const [nowMs, setNowMs] = useState(Date.now());
-  const [musicEnabled, setMusicEnabled] = useState(true);
-  const [fxEnabled, setFxEnabled] = useState(true);
+  const [audioEnabled, setAudioEnabled] = useState(true);
 
   useEffect(() => {
     setMounted(true);
@@ -159,23 +159,17 @@ export default function Home() {
 
   useEffect(() => {
     const unlockAudio = () => {
-      if (musicEnabled) {
+      if (audioEnabled) {
         startAuthShowcaseMusic();
-      }
-      if (fxEnabled) {
         startAuthShowcaseEffects();
       }
     };
 
-    if (musicEnabled) {
+    if (audioEnabled) {
       startAuthShowcaseMusic();
-    } else {
-      stopAuthShowcaseMusic();
-    }
-
-    if (fxEnabled) {
       startAuthShowcaseEffects();
     } else {
+      stopAuthShowcaseMusic();
       stopAuthShowcaseEffects();
     }
 
@@ -188,17 +182,17 @@ export default function Home() {
       stopAuthShowcaseMusic();
       stopAuthShowcaseEffects();
     };
-  }, [fxEnabled, musicEnabled]);
+  }, [audioEnabled]);
 
   const playHoverFx = () => {
-    if (!fxEnabled) {
+    if (!audioEnabled) {
       return;
     }
     playSound('hover');
   };
 
   const playSwitchFx = () => {
-    if (!fxEnabled) {
+    if (!audioEnabled) {
       return;
     }
     playClickSound();
@@ -247,12 +241,15 @@ export default function Home() {
   return (
     <div className="min-h-screen relative overflow-hidden bg-slate-950">
       {renderHomeShowcaseBackground()}
-      <header className="relative z-10 flex items-center justify-between px-6 py-4">
-        <div className="flex items-center gap-2">
-          <span className="text-3xl drop-shadow-[0_0_14px_rgba(99,102,241,0.65)]">🦞</span>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-300 via-indigo-300 to-fuchsia-300 bg-clip-text text-transparent">
-            {t('common.appName')}
-          </h1>
+      <header className="relative z-10 flex items-start justify-between px-6 py-4">
+        <div className="flex flex-col items-start gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-3xl drop-shadow-[0_0_14px_rgba(99,102,241,0.65)]">🦞</span>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-300 via-indigo-300 to-fuchsia-300 bg-clip-text text-transparent">
+              {t('common.appName')}
+            </h1>
+          </div>
+          <GlobalMythChip floating={false} />
         </div>
         <nav className="flex gap-4">
           <Link href="/dashboard" onMouseEnter={playHoverFx} onClick={playSwitchFx} className="text-slate-300 hover:text-white">
@@ -278,25 +275,16 @@ export default function Home() {
           <button
             type="button"
             onClick={() => {
-              setMusicEnabled((prev) => !prev);
-              playSwitchFx();
-            }}
-            onMouseEnter={playHoverFx}
-            className="px-3 py-2 rounded-lg bg-slate-800/70 border border-slate-600 hover:border-cyan-400 text-xs sm:text-sm"
-          >
-            {musicEnabled ? `🎹 ${t('landing.musicOn')}` : `🔇 ${t('landing.musicOff')}`}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setFxEnabled((prev) => !prev);
-              playClickSound();
-              playAuthUiEffect('switch');
+              if (audioEnabled) {
+                playClickSound();
+                playAuthUiEffect('switch');
+              }
+              setAudioEnabled((prev) => !prev);
             }}
             onMouseEnter={playHoverFx}
             className="px-3 py-2 rounded-lg bg-slate-800/70 border border-slate-600 hover:border-fuchsia-400 text-xs sm:text-sm"
           >
-            {fxEnabled ? `✨ ${t('landing.fxOn')}` : `🔕 ${t('landing.fxOff')}`}
+            {audioEnabled ? `🔊 ${t('landing.audioOn')}` : `🔇 ${t('landing.audioOff')}`}
           </button>
           <LanguageSwitcher />
           {mounted && <AuthStatus />}

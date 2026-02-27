@@ -6,6 +6,7 @@ import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import AuthStatus from '@/components/AuthStatus';
 import RequireAuth from '@/components/RequireAuth';
+import GlobalMythChip from '@/components/GlobalMythChip';
 import { useAuth } from '@/components/AuthProvider';
 import { getScopedStorageKey } from '@/lib/auth';
 import { localizePetName } from '@/lib/petNames';
@@ -17,8 +18,14 @@ import {
   readBattleCooldownUntil,
   setBattleCooldownUntil,
 } from '@/lib/battleCooldown';
-import { readActiveGatherTask } from '@/lib/magicPotions';
-import { BATTLE_VICTORY_REWARD as BATTLE_VICTORY_MYTH_REWARD, grantMyth } from '@/lib/economy';
+import {
+  consumeHealthPotion,
+  consumeMagicPotion,
+  readActiveGatherTask,
+  readHealthPotionCount,
+  readMagicPotionCount,
+} from '@/lib/magicPotions';
+import { BATTLE_VICTORY_REWARD as BATTLE_VICTORY_MYTH_REWARD, grantMyth, readMythBalance } from '@/lib/economy';
 import {
   playAttackSound,
   playVictorySound,
@@ -47,6 +54,8 @@ interface Pet {
   element: Element[];
   gender: Gender;
   level: number;
+  exp?: number;
+  maxExp?: number;
   hp: number;
   maxHp: number;
   mp: number;
@@ -67,6 +76,8 @@ const DEFAULT_PLAYER_PET: Pet = {
   element: ['fire'],
   gender: 'male',
   level: 5,
+  exp: 0,
+  maxExp: getExpThresholdForLevel(5),
   hp: 100,
   maxHp: 100,
   mp: 60,
@@ -77,13 +88,18 @@ const DEFAULT_PLAYER_PET: Pet = {
 };
 
 const SPECIAL_SKILL_MP_COST = 20;
-const BATTLE_EXP_REWARD = 100;
+const BATTLE_EXP_REWARD = 5;
 const BATTLE_LEVELUP_ATTACK_GAIN = 2;
 const BATTLE_LEVELUP_DEFENSE_GAIN = 2;
+const MAX_NPC_LEVEL = 99;
+const BATTLE_MAGIC_POTION_RECOVERY = 100;
+const BATTLE_HEALTH_POTION_RECOVERY = 100;
 
 interface BattleRewardProgression {
   levelUps: number;
   nextLevel: number;
+  nextExp: number;
+  nextMaxExp: number;
   nextAttack: number;
   nextDefense: number;
   nextHp: number;
@@ -192,7 +208,12 @@ export default function Battle() {
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState(0);
   const [gatherBlocked, setGatherBlocked] = useState(false);
   const [gatherRemainingMs, setGatherRemainingMs] = useState(0);
+  const [activeGatherPetId, setActiveGatherPetId] = useState<number | null>(null);
   const [lastBattleLevelUps, setLastBattleLevelUps] = useState(0);
+  const [mythBalance, setMythBalance] = useState(0);
+  const [magicPotionCount, setMagicPotionCount] = useState(0);
+  const [healthPotionCount, setHealthPotionCount] = useState(0);
+  const [potionNotice, setPotionNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const normalizeElements = (element: unknown): Element[] => {
     const source = Array.isArray(element) ? element : [element];
@@ -224,6 +245,8 @@ export default function Battle() {
       element: normalizeElements(rawPet.element),
       gender: rawPet.gender === 'female' ? 'female' : 'male',
       level: expProgress.level,
+      exp: expProgress.current,
+      maxExp: getExpThresholdForLevel(expProgress.level),
       hp: typeof rawPet.hp === 'number' && rawPet.hp >= 0 ? Math.min(rawPet.hp, maxHp) : maxHp,
       maxHp,
       mp: typeof rawPet.mp === 'number' && rawPet.mp >= 0 ? Math.min(rawPet.mp, maxMp) : maxMp,
@@ -231,6 +254,41 @@ export default function Battle() {
       attack: typeof rawPet.attack === 'number' && rawPet.attack > 0 ? rawPet.attack : DEFAULT_PLAYER_PET.attack,
       defense: typeof rawPet.defense === 'number' && rawPet.defense > 0 ? rawPet.defense : DEFAULT_PLAYER_PET.defense,
       image: '🦞',
+    };
+  };
+
+  const createMatchedEnemy = (playerLevel: number): Pet => {
+    const safePlayerLevel = Math.max(1, Math.floor(playerLevel));
+    const targetLevelOptions: number[] = [];
+
+    if (safePlayerLevel > 1) {
+      targetLevelOptions.push(safePlayerLevel - 1);
+    }
+    if (safePlayerLevel < MAX_NPC_LEVEL) {
+      targetLevelOptions.push(safePlayerLevel + 1);
+    }
+
+    const targetLevel =
+      targetLevelOptions.length > 0
+        ? targetLevelOptions[Math.floor(Math.random() * targetLevelOptions.length)]
+        : Math.max(1, safePlayerLevel);
+
+    const template = oceanEnemyTemplates[Math.floor(Math.random() * oceanEnemyTemplates.length)];
+    const levelRatio = targetLevel / Math.max(1, template.level);
+    const maxHp = Math.max(40, Math.round(template.maxHp * levelRatio));
+    const maxMp = Math.max(20, Math.round(template.maxMp * levelRatio));
+    const attack = Math.max(8, Math.round(template.attack * levelRatio));
+    const defense = Math.max(5, Math.round(template.defense * levelRatio));
+
+    return {
+      ...template,
+      level: targetLevel,
+      hp: maxHp,
+      maxHp,
+      mp: maxMp,
+      maxMp,
+      attack,
+      defense,
     };
   };
 
@@ -256,14 +314,43 @@ export default function Battle() {
     }
   };
 
+  const updateStoredPetHp = (petId: number | undefined, hp: number, maxHp: number) => {
+    if (!petId) {
+      return;
+    }
+    const raw = localStorage.getItem(getScopedStorageKey('myPets', username || undefined));
+    if (!raw) {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return;
+      }
+      const next = parsed.map((pet: any) =>
+        Number(pet?.id) === petId ? { ...pet, hp: Math.max(1, hp), maxHp: Math.max(1, maxHp) } : pet,
+      );
+      localStorage.setItem(getScopedStorageKey('myPets', username || undefined), JSON.stringify(next));
+    } catch {
+      // Ignore invalid local data.
+    }
+  };
+
   const applyVictoryRewardsToStoredPet = (
     petId: number | undefined,
     currentPet: Pet,
     expReward: number,
   ): BattleRewardProgression => {
+    const currentExp = typeof currentPet.exp === 'number' && currentPet.exp >= 0 ? currentPet.exp : 0;
+    const currentMaxExp =
+      typeof currentPet.maxExp === 'number' && currentPet.maxExp > 0
+        ? currentPet.maxExp
+        : getExpThresholdForLevel(currentPet.level);
     const fallback: BattleRewardProgression = {
       levelUps: 0,
       nextLevel: currentPet.level,
+      nextExp: currentExp,
+      nextMaxExp: currentMaxExp,
       nextAttack: currentPet.attack,
       nextDefense: currentPet.defense,
       nextHp: currentPet.hp,
@@ -327,6 +414,8 @@ export default function Battle() {
         progression = {
           levelUps,
           nextLevel: level,
+          nextExp: exp,
+          nextMaxExp: maxExp,
           nextAttack: attack,
           nextDefense: defense,
           nextHp,
@@ -359,8 +448,15 @@ export default function Battle() {
   useEffect(() => {
     if (!isAuthenticated || !username) {
       setOwnedPets([]);
+      setMythBalance(0);
+      setMagicPotionCount(0);
+      setHealthPotionCount(0);
       return;
     }
+
+    setMythBalance(readMythBalance(username));
+    setMagicPotionCount(readMagicPotionCount(username));
+    setHealthPotionCount(readHealthPotionCount(username));
 
     try {
       const raw = localStorage.getItem(getScopedStorageKey('myPets', username));
@@ -402,6 +498,14 @@ export default function Battle() {
   }, [isAuthenticated, username]);
 
   useEffect(() => {
+    if (!potionNotice) {
+      return;
+    }
+    const timer = setTimeout(() => setPotionNotice(null), 2500);
+    return () => clearTimeout(timer);
+  }, [potionNotice]);
+
+  useEffect(() => {
     if (battleState !== 'idle' || battleMode !== 'pvp') {
       return;
     }
@@ -435,6 +539,7 @@ export default function Battle() {
 
     const syncGatherBlock = () => {
       const activeTask = readActiveGatherTask(Date.now(), username);
+      setActiveGatherPetId(activeTask?.petId ?? null);
       if (activeTask && playerPet.id && activeTask.petId === playerPet.id) {
         setGatherBlocked(true);
         setGatherRemainingMs(Math.max(0, activeTask.endsAt - Date.now()));
@@ -489,6 +594,91 @@ export default function Battle() {
   const gatherBlockLabel = formatCooldownTimer(gatherRemainingMs);
   const activePvpAttacker = pvpTurn === 'left' ? playerPet : enemyPet;
   const activeSkillMp = battleMode === 'pvp' ? activePvpAttacker.mp : playerPet.mp;
+  const playerExpMax =
+    typeof playerPet.maxExp === 'number' && playerPet.maxExp > 0
+      ? playerPet.maxExp
+      : getExpThresholdForLevel(playerPet.level);
+  const playerExpCurrent =
+    typeof playerPet.exp === 'number' && playerPet.exp >= 0
+      ? Math.min(playerExpMax, playerPet.exp)
+      : 0;
+  const playerExpPercent = Math.max(0, Math.min(100, (playerExpCurrent / Math.max(1, playerExpMax)) * 100));
+
+  const selectPetForPve = (pet: OwnedPet) => {
+    if (battleState !== 'idle' || battleMode !== 'pve') {
+      return;
+    }
+
+    setPlayerPet({
+      ...pet,
+      hp: pet.maxHp,
+    });
+    setLogs([t('battle.selectForBattleLog', { name: resolvePetName(pet) })]);
+  };
+
+  const handleUseMagicPotion = () => {
+    if (!username) {
+      return;
+    }
+    if (battleMode === 'pvp') {
+      setPotionNotice({ type: 'error', text: t('battle.potionPveOnly') });
+      return;
+    }
+    if (magicPotionCount <= 0) {
+      setPotionNotice({ type: 'error', text: t('battle.noMagicPotion') });
+      return;
+    }
+    if (playerPet.mp >= playerPet.maxMp) {
+      setPotionNotice({ type: 'error', text: t('battle.mpAlreadyFull') });
+      return;
+    }
+
+    const nextMp = Math.min(playerPet.maxMp, playerPet.mp + BATTLE_MAGIC_POTION_RECOVERY);
+    const recovered = nextMp - playerPet.mp;
+    const left = consumeMagicPotion(1, username);
+    setMagicPotionCount(left);
+    setPlayerPet((current) => ({ ...current, mp: nextMp }));
+    updateStoredPetMp(playerPet.id, nextMp, playerPet.maxMp);
+    setOwnedPets((current) =>
+      current.map((pet) => (pet.id === playerPet.id ? { ...pet, mp: nextMp, maxMp: playerPet.maxMp } : pet)),
+    );
+    setPotionNotice({
+      type: 'success',
+      text: t('battle.useMagicPotionSuccess', { recover: recovered, left }),
+    });
+  };
+
+  const handleUseHealthPotion = () => {
+    if (!username) {
+      return;
+    }
+    if (battleMode === 'pvp') {
+      setPotionNotice({ type: 'error', text: t('battle.potionPveOnly') });
+      return;
+    }
+    if (healthPotionCount <= 0) {
+      setPotionNotice({ type: 'error', text: t('battle.noHealthPotion') });
+      return;
+    }
+    if (playerPet.hp >= playerPet.maxHp) {
+      setPotionNotice({ type: 'error', text: t('battle.hpAlreadyFull') });
+      return;
+    }
+
+    const nextHp = Math.min(playerPet.maxHp, playerPet.hp + BATTLE_HEALTH_POTION_RECOVERY);
+    const recovered = nextHp - playerPet.hp;
+    const left = consumeHealthPotion(1, username);
+    setHealthPotionCount(left);
+    setPlayerPet((current) => ({ ...current, hp: nextHp }));
+    updateStoredPetHp(playerPet.id, nextHp, playerPet.maxHp);
+    setOwnedPets((current) =>
+      current.map((pet) => (pet.id === playerPet.id ? { ...pet, hp: nextHp, maxHp: playerPet.maxHp } : pet)),
+    );
+    setPotionNotice({
+      type: 'success',
+      text: t('battle.useHealthPotionSuccess', { recover: recovered, left }),
+    });
+  };
 
   const startBattle = () => {
     if (battleMode === 'pvp') {
@@ -529,8 +719,8 @@ export default function Battle() {
     }
 
     stopBattleResultSound();
-    const randomEnemy = oceanEnemyTemplates[Math.floor(Math.random() * oceanEnemyTemplates.length)];
-    setEnemyPet({ ...randomEnemy, hp: randomEnemy.maxHp });
+    const matchedEnemy = createMatchedEnemy(playerPet.level);
+    setEnemyPet(matchedEnemy);
     setBattleState('fighting');
     setPvpWinner(null);
     setLastBattleLevelUps(0);
@@ -636,11 +826,14 @@ export default function Battle() {
       stopBattleMusic();
       playVictorySound();
       const progression = applyVictoryRewardsToStoredPet(playerPet.id, playerPet, BATTLE_EXP_REWARD);
-      grantMyth(BATTLE_VICTORY_MYTH_REWARD, 'battle-victory', username || undefined);
+      const mythRewardResult = grantMyth(BATTLE_VICTORY_MYTH_REWARD, 'battle-victory', username || undefined);
+      setMythBalance(mythRewardResult.balance);
       setLastBattleLevelUps(progression.levelUps);
       setPlayerPet((current) => ({
         ...current,
         level: progression.nextLevel,
+        exp: progression.nextExp,
+        maxExp: progression.nextMaxExp,
         attack: progression.nextAttack,
         defense: progression.nextDefense,
         maxHp: progression.nextMaxHp,
@@ -694,13 +887,16 @@ export default function Battle() {
 
   return (
     <div className="min-h-screen bg-slate-900">
-      <header className="flex items-center justify-between px-6 py-4 bg-slate-800/50 backdrop-blur-sm">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">🦞</span>
-            <span className="text-xl font-bold text-white">{t('common.appName')}</span>
-          </Link>
-          <nav className="flex gap-4 ml-8">
+      <header className="flex items-start justify-between px-6 py-4 bg-slate-800/50 backdrop-blur-sm">
+        <div className="flex items-start gap-4">
+          <div className="flex flex-col items-start gap-2">
+            <Link href="/" className="flex items-center gap-2">
+              <span className="text-2xl">🦞</span>
+              <span className="text-xl font-bold text-white">{t('common.appName')}</span>
+            </Link>
+            <GlobalMythChip floating={false} />
+          </div>
+          <nav className="flex gap-4 ml-4 mt-1">
             <Link href="/dashboard" className="text-slate-400 hover:text-white">
               {t('nav.dashboard')}
             </Link>
@@ -774,6 +970,15 @@ export default function Battle() {
             </p>
             <p className="text-xs text-slate-300 mb-2">
               {t('dashboard.attack')} {playerPet.attack} • {t('dashboard.defense')} {playerPet.defense}
+            </p>
+            <div className="w-48 h-3 bg-slate-700 rounded-full overflow-hidden mb-1">
+              <div
+                className="h-full bg-violet-500 transition-all"
+                style={{ width: `${playerExpPercent}%` }}
+              />
+            </div>
+            <p className="text-violet-300 text-xs">
+              {t('dashboard.pet.exp')}: {playerExpCurrent}/{playerExpMax}
             </p>
             <div className="w-48 h-4 bg-slate-700 rounded-full overflow-hidden">
               <div
@@ -850,6 +1055,154 @@ export default function Battle() {
             </p>
           </div>
         </div>
+
+        <section className="max-w-6xl mx-auto mb-8 p-3 rounded-2xl border border-slate-700 bg-slate-800/40">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <h2 className="text-base font-semibold text-white">🦞 {t('battle.rosterTitle')}</h2>
+            {battleMode === 'pve' && battleState === 'idle' && (
+              <p className="text-[11px] text-slate-300">{t('battle.rosterHint')}</p>
+            )}
+          </div>
+
+          {ownedPets.length === 0 ? (
+            <p className="text-sm text-slate-400">{t('battle.rosterEmpty')}</p>
+          ) : (
+            <div className="max-h-72 overflow-y-auto pr-1">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2">
+              {ownedPets.map((pet) => {
+                const isSelected = playerPet.id === pet.id;
+                const isGathering = activeGatherPetId === pet.id;
+                const selectable = battleMode === 'pve' && battleState === 'idle';
+                const petMaxExp =
+                  typeof pet.maxExp === 'number' && pet.maxExp > 0 ? pet.maxExp : getExpThresholdForLevel(pet.level);
+                const petExp = typeof pet.exp === 'number' && pet.exp >= 0 ? Math.min(petMaxExp, pet.exp) : 0;
+
+                return (
+                  <button
+                    key={`battle-roster-${pet.id}`}
+                    type="button"
+                    onClick={() => selectPetForPve(pet)}
+                    disabled={!selectable}
+                    className={`text-left p-2 rounded-lg border transition-all ${
+                      isSelected
+                        ? 'border-indigo-400 bg-indigo-500/20 shadow-[0_0_0_1px_rgba(129,140,248,0.5)]'
+                        : 'border-slate-600 bg-slate-900/80'
+                    } ${
+                      selectable
+                        ? 'hover:border-indigo-300 hover:bg-slate-800/90'
+                        : 'cursor-not-allowed opacity-80'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div>
+                        <p className="text-sm font-semibold text-white">{resolvePetName(pet)}</p>
+                        <p className="text-[11px] text-slate-300">
+                          Lv.{pet.level} • {pet.element.map(resolveElementLabel).join('/')}
+                        </p>
+                      </div>
+                      <div className="flex gap-1 flex-wrap justify-end">
+                        {isSelected && (
+                          <span className="px-2 py-0.5 rounded bg-indigo-500/30 text-indigo-200 text-[11px]">
+                            {t('battle.selectedBadge')}
+                          </span>
+                        )}
+                        {isGathering && (
+                          <span className="px-2 py-0.5 rounded bg-red-500/30 text-red-300 text-[11px]">
+                            {t('gather.busyButton')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-slate-400 mb-2">
+                      {t('dashboard.attack')} {pet.attack} • {t('dashboard.defense')} {pet.defense}
+                    </p>
+                    <p className="text-[11px] text-violet-300 mb-2">
+                      {t('dashboard.pet.exp')}: {petExp}/{petMaxExp}
+                    </p>
+
+                    <div className="space-y-2">
+                      <div>
+                        <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-green-500"
+                            style={{ width: `${Math.max(0, Math.min(100, (pet.hp / Math.max(1, pet.maxHp)) * 100))}%` }}
+                          />
+                        </div>
+                        <p className="text-[11px] text-green-300 mt-1">
+                          {t('battle.hp')}: {pet.hp}/{pet.maxHp}
+                        </p>
+                      </div>
+                      <div>
+                        <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-cyan-500"
+                            style={{ width: `${Math.max(0, Math.min(100, (pet.mp / Math.max(1, pet.maxMp)) * 100))}%` }}
+                          />
+                        </div>
+                        <p className="text-[11px] text-cyan-300 mt-1">
+                          {t('battle.mp')}: {pet.mp}/{pet.maxMp}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="max-w-3xl mx-auto mb-8 p-4 rounded-xl border border-slate-700 bg-slate-800/50">
+          <h2 className="text-sm font-semibold text-white mb-3">🧪 {t('battle.potionPanelTitle')}</h2>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div className="rounded-lg border border-cyan-500/40 bg-slate-900/70 p-3">
+              <p className="text-xs text-cyan-200 font-medium">
+                {t('battle.magicPotionCount', { count: magicPotionCount })}
+              </p>
+              <p className="text-[11px] text-slate-400 mt-1">
+                {t('battle.magicPotionRecover', { amount: BATTLE_MAGIC_POTION_RECOVERY })}
+              </p>
+              <button
+                onClick={handleUseMagicPotion}
+                disabled={battleMode === 'pvp' || magicPotionCount <= 0 || playerPet.mp >= playerPet.maxMp}
+                className={`mt-2 w-full rounded-lg px-3 py-1.5 text-xs font-medium ${
+                  battleMode === 'pvp' || magicPotionCount <= 0 || playerPet.mp >= playerPet.maxMp
+                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                    : 'bg-cyan-600 hover:bg-cyan-500 text-white'
+                }`}
+              >
+                {t('battle.useMagicPotion')}
+              </button>
+            </div>
+
+            <div className="rounded-lg border border-rose-500/40 bg-slate-900/70 p-3">
+              <p className="text-xs text-rose-200 font-medium">
+                {t('battle.healthPotionCount', { count: healthPotionCount })}
+              </p>
+              <p className="text-[11px] text-slate-400 mt-1">
+                {t('battle.healthPotionRecover', { amount: BATTLE_HEALTH_POTION_RECOVERY })}
+              </p>
+              <button
+                onClick={handleUseHealthPotion}
+                disabled={battleMode === 'pvp' || healthPotionCount <= 0 || playerPet.hp >= playerPet.maxHp}
+                className={`mt-2 w-full rounded-lg px-3 py-1.5 text-xs font-medium ${
+                  battleMode === 'pvp' || healthPotionCount <= 0 || playerPet.hp >= playerPet.maxHp
+                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                    : 'bg-rose-600 hover:bg-rose-500 text-white'
+                }`}
+              >
+                {t('battle.useHealthPotion')}
+              </button>
+            </div>
+          </div>
+          <p className="mt-2 text-[11px] text-slate-400">{t('battle.potionPanelHint')}</p>
+          {potionNotice && (
+            <p className={`mt-2 text-xs ${potionNotice.type === 'success' ? 'text-emerald-300' : 'text-red-300'}`}>
+              {potionNotice.text}
+            </p>
+          )}
+        </section>
 
         {battleState === 'idle' && (
           <div className="text-center">
@@ -931,7 +1284,7 @@ export default function Battle() {
                 ? `⏳ ${t('battle.cooldownButton', { time: cooldownLabel })}`
                 : `⚔️ ${t('battle.startBattle')}`}
             </button>
-            {battleMode === 'pve' && gatherBlocked && <p className="mt-3 text-sm text-blue-300">{t('gather.busyBattle', { time: gatherBlockLabel })}</p>}
+            {battleMode === 'pve' && gatherBlocked && <p className="mt-3 text-sm text-red-300">{t('gather.busyBattle', { time: gatherBlockLabel })}</p>}
             {battleMode === 'pve' && isCooldownActive && (
               <p className="mt-3 text-sm text-slate-300">{t('battle.cooldownNotice', { time: cooldownLabel })}</p>
             )}
@@ -983,6 +1336,9 @@ export default function Battle() {
                 <p className="text-2xl text-indigo-400 mb-3">
                   {t('battle.victoryReward', { exp: BATTLE_EXP_REWARD, myth: BATTLE_VICTORY_MYTH_REWARD })}
                 </p>
+                <p className="text-sm text-violet-300 mb-2">
+                  {t('dashboard.pet.exp')}: {playerExpCurrent}/{playerExpMax}
+                </p>
                 {lastBattleLevelUps > 0 && (
                   <p className="text-sm text-emerald-300 mb-6">
                     {t('battle.levelUp', { name: resolvePetName(playerPet), level: playerPet.level })}
@@ -1030,7 +1386,7 @@ export default function Battle() {
                 ? `⏳ ${t('battle.cooldownButton', { time: cooldownLabel })}`
                 : `${t('battle.challengeAgain')} 💪`}
             </button>
-            {gatherBlocked && <p className="mt-3 text-sm text-blue-300">{t('gather.busyBattle', { time: gatherBlockLabel })}</p>}
+            {gatherBlocked && <p className="mt-3 text-sm text-red-300">{t('gather.busyBattle', { time: gatherBlockLabel })}</p>}
           </div>
         )}
 

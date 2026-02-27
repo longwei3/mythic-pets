@@ -158,6 +158,7 @@ export default function Adventure3DPage() {
   const quality = profile?.settings.quality ?? 'high';
   const musicEnabled = profile?.settings.musicEnabled ?? true;
   const sfxEnabled = profile?.settings.sfxEnabled ?? true;
+  const audioEnabled = musicEnabled && sfxEnabled;
 
   useEffect(() => {
     if (!username) {
@@ -500,26 +501,15 @@ export default function Adventure3DPage() {
     setProfile(next);
   };
 
-  const handleMusicToggle = () => {
+  const handleAudioToggle = () => {
     if (!username || !profile) {
       return;
     }
+    const nextEnabled = !audioEnabled;
     const next = updateAdventureSettings(
       {
-        musicEnabled: !profile.settings.musicEnabled,
-      },
-      username,
-    );
-    setProfile(next);
-  };
-
-  const handleSfxToggle = () => {
-    if (!username || !profile) {
-      return;
-    }
-    const next = updateAdventureSettings(
-      {
-        sfxEnabled: !profile.settings.sfxEnabled,
+        musicEnabled: nextEnabled,
+        sfxEnabled: nextEnabled,
       },
       username,
     );
@@ -580,6 +570,11 @@ export default function Adventure3DPage() {
                   </span>
                 </div>
 
+                <div className="mb-2 flex items-center justify-between text-[11px]">
+                  <span className="text-slate-300">{t('adventure3d.balance')}</span>
+                  <span className="font-semibold text-emerald-300">{mythBalance} $MYTH</span>
+                </div>
+
                 <div className="mb-2">
                   <div className="mb-1 flex items-center justify-between text-[11px]">
                     <span className="text-slate-300">{t('adventure3d.hp')}</span>
@@ -594,7 +589,7 @@ export default function Adventure3DPage() {
 
                 <div className="mb-2">
                   <div className="mb-1 flex items-center justify-between text-[11px]">
-                    <span className="text-slate-300">{t('adventure3d.energy')}</span>
+                    <span className="text-slate-300">{t('battle.mp')}</span>
                     <span className="text-slate-400">
                       {Math.round(world.player.energy)}/{world.player.maxEnergy}
                     </span>
@@ -624,9 +619,7 @@ export default function Adventure3DPage() {
 
           <aside className="rounded-2xl border border-cyan-500/30 bg-slate-900/70 p-4 space-y-4">
             <div>
-              <p className="text-xs text-slate-400">{t('adventure3d.balance')}</p>
-              <p className="text-xl font-bold text-emerald-300">{mythBalance} $MYTH</p>
-              <p className="mt-1 text-xs text-cyan-300">
+              <p className="text-xs text-cyan-300">
                 {isGameMode ? t('adventure3d.gameModeOn') : t('adventure3d.gameModeOff')}
               </p>
               <p className="mt-1 text-xs text-slate-400">
@@ -711,15 +704,12 @@ export default function Adventure3DPage() {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
               <button type="button" onClick={handleQualityToggle} className="px-2 py-2 rounded bg-slate-800 hover:bg-slate-700">
                 {quality === 'high' ? t('adventure3d.qualityHigh') : t('adventure3d.qualityLow')}
               </button>
-              <button type="button" onClick={handleMusicToggle} className="px-2 py-2 rounded bg-slate-800 hover:bg-slate-700">
-                {musicEnabled ? t('adventure3d.musicOn') : t('adventure3d.musicOff')}
-              </button>
-              <button type="button" onClick={handleSfxToggle} className="px-2 py-2 rounded bg-slate-800 hover:bg-slate-700">
-                {sfxEnabled ? t('adventure3d.sfxOn') : t('adventure3d.sfxOff')}
+              <button type="button" onClick={handleAudioToggle} className="px-2 py-2 rounded bg-slate-800 hover:bg-slate-700">
+                {audioEnabled ? t('adventure3d.audioOn') : t('adventure3d.audioOff')}
               </button>
               <button type="button" onClick={handleViewModeToggle} className="px-2 py-2 rounded bg-slate-800 hover:bg-slate-700">
                 {viewMode === 'tps' ? t('adventure3d.viewSwitchToFirst') : t('adventure3d.viewSwitchToThird')}

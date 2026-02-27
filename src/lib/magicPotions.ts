@@ -1,6 +1,7 @@
 import { getScopedStorageKey } from '@/lib/auth';
 
 export const MAGIC_POTION_COUNT_KEY = 'mythicpets-magic-potions';
+export const HEALTH_POTION_COUNT_KEY = 'mythicpets-health-potions';
 export const GATHER_TASK_KEY = 'mythicpets-gather-task';
 export const GATHER_DURATION_MS = 60 * 60 * 1000;
 
@@ -57,6 +58,47 @@ export function consumeMagicPotion(count = 1, profileKey?: string): number {
   const current = readMagicPotionCount(profileKey);
   const next = Math.max(0, current - Math.max(1, Math.floor(count)));
   writeMagicPotionCount(next, profileKey);
+  return next;
+}
+
+export function readHealthPotionCount(profileKey?: string): number {
+  if (!hasWindow()) {
+    return 0;
+  }
+
+  const key = scopedKey(HEALTH_POTION_COUNT_KEY, profileKey);
+  const raw = localStorage.getItem(key);
+  if (!raw) {
+    return 0;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    localStorage.removeItem(key);
+    return 0;
+  }
+
+  return parsed;
+}
+
+export function writeHealthPotionCount(count: number, profileKey?: string): void {
+  if (!hasWindow()) {
+    return;
+  }
+  localStorage.setItem(scopedKey(HEALTH_POTION_COUNT_KEY, profileKey), String(Math.max(0, Math.floor(count))));
+}
+
+export function addHealthPotion(count = 1, profileKey?: string): number {
+  const current = readHealthPotionCount(profileKey);
+  const next = current + Math.max(1, Math.floor(count));
+  writeHealthPotionCount(next, profileKey);
+  return next;
+}
+
+export function consumeHealthPotion(count = 1, profileKey?: string): number {
+  const current = readHealthPotionCount(profileKey);
+  const next = Math.max(0, current - Math.max(1, Math.floor(count)));
+  writeHealthPotionCount(next, profileKey);
   return next;
 }
 

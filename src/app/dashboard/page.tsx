@@ -6,14 +6,23 @@ import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import AuthStatus from '@/components/AuthStatus';
 import RequireAuth from '@/components/RequireAuth';
+import GlobalMythChip from '@/components/GlobalMythChip';
 import { useAuth } from '@/components/AuthProvider';
 import { getScopedStorageKey } from '@/lib/auth';
 import { localizePetName } from '@/lib/petNames';
 import { formatCooldownTimer, getBattleCooldownRemainingMs } from '@/lib/battleCooldown';
-import { consumeMagicPotion, readGatherTask, readMagicPotionCount, type GatherTask } from '@/lib/magicPotions';
+import {
+  consumeHealthPotion,
+  consumeMagicPotion,
+  readGatherTask,
+  readHealthPotionCount,
+  readMagicPotionCount,
+  type GatherTask,
+} from '@/lib/magicPotions';
 import {
   DAILY_CHECKIN_REWARD,
   claimDailyCheckIn,
+  getDailyCheckInRemainingMs,
   hasClaimedDailyCheckIn,
   readMythBalance,
 } from '@/lib/economy';
@@ -55,6 +64,9 @@ const genderColors: Record<Gender, { color: string; bg: string }> = {
   male: { color: 'text-red-400', bg: 'bg-red-500/30' },
   female: { color: 'text-pink-400', bg: 'bg-pink-500/30' },
 };
+
+const MAGIC_POTION_MP_RECOVERY = 100;
+const HEALTH_POTION_HP_RECOVERY = 100;
 
 function normalizeElements(element: unknown): Element[] {
   const source = Array.isArray(element) ? element : [element];
@@ -101,15 +113,25 @@ function normalizePet(rawPet: any): Pet {
   };
 }
 
+function formatCheckInCooldown(ms: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+  return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
 export default function Dashboard() {
   const { t } = useTranslation();
   const { ready, isAuthenticated, username } = useAuth();
   const [pets, setPets] = useState<Pet[]>([]);
   const [nowMs, setNowMs] = useState(Date.now());
-  const [potionCount, setPotionCount] = useState(0);
+  const [magicPotionCount, setMagicPotionCount] = useState(0);
+  const [healthPotionCount, setHealthPotionCount] = useState(0);
   const [gatherTask, setGatherTask] = useState<GatherTask | null>(null);
   const [mythBalance, setMythBalance] = useState(0);
   const [dailyClaimed, setDailyClaimed] = useState(true);
+  const [dailyClaimRemainingMs, setDailyClaimRemainingMs] = useState(0);
   const [checkInNotice, setCheckInNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -180,10 +202,12 @@ export default function Dashboard() {
       localStorage.setItem(generationKey, String(generation1Count + 1));
     }
 
-    setPotionCount(readMagicPotionCount(username));
+    setMagicPotionCount(readMagicPotionCount(username));
+    setHealthPotionCount(readHealthPotionCount(username));
     setGatherTask(readGatherTask(username));
     setMythBalance(readMythBalance(username));
     setDailyClaimed(hasClaimedDailyCheckIn(username));
+    setDailyClaimRemainingMs(getDailyCheckInRemainingMs(username));
   }, [isAuthenticated, t, username]);
 
   useEffect(() => {
@@ -194,9 +218,11 @@ export default function Dashboard() {
     const timer = setInterval(() => {
       setNowMs(Date.now());
       setGatherTask(readGatherTask(username));
-      setPotionCount(readMagicPotionCount(username));
+      setMagicPotionCount(readMagicPotionCount(username));
+      setHealthPotionCount(readHealthPotionCount(username));
       setMythBalance(readMythBalance(username));
       setDailyClaimed(hasClaimedDailyCheckIn(username));
+      setDailyClaimRemainingMs(getDailyCheckInRemainingMs(username));
     }, 1000);
     return () => clearInterval(timer);
   }, [isAuthenticated, username]);
@@ -227,7 +253,7 @@ export default function Dashboard() {
     if (!username) {
       return;
     }
-    if (potionCount <= 0 || (gatherPetStatus === 'gathering' && gatherPetId === petId)) {
+    if (magicPotionCount <= 0 || (gatherPetStatus === 'gathering' && gatherPetId === petId)) {
       return;
     }
 
@@ -236,11 +262,33 @@ export default function Dashboard() {
       return;
     }
 
-    const updatedPets = pets.map((pet) => (pet.id === petId ? { ...pet, mp: pet.maxMp } : pet));
+    const nextMp = Math.min(target.maxMp, target.mp + MAGIC_POTION_MP_RECOVERY);
+    const updatedPets = pets.map((pet) => (pet.id === petId ? { ...pet, mp: nextMp } : pet));
     setPets(updatedPets);
     localStorage.setItem(getScopedStorageKey('myPets', username || undefined), JSON.stringify(updatedPets));
     const nextPotionCount = consumeMagicPotion(1, username);
-    setPotionCount(nextPotionCount);
+    setMagicPotionCount(nextPotionCount);
+  };
+
+  const handleUseHealthPotion = (petId: number) => {
+    if (!username) {
+      return;
+    }
+    if (healthPotionCount <= 0 || (gatherPetStatus === 'gathering' && gatherPetId === petId)) {
+      return;
+    }
+
+    const target = pets.find((pet) => pet.id === petId);
+    if (!target || target.hp >= target.maxHp) {
+      return;
+    }
+
+    const nextHp = Math.min(target.maxHp, target.hp + HEALTH_POTION_HP_RECOVERY);
+    const updatedPets = pets.map((pet) => (pet.id === petId ? { ...pet, hp: nextHp } : pet));
+    setPets(updatedPets);
+    localStorage.setItem(getScopedStorageKey('myPets', username || undefined), JSON.stringify(updatedPets));
+    const nextPotionCount = consumeHealthPotion(1, username);
+    setHealthPotionCount(nextPotionCount);
   };
 
   const handleDailyCheckIn = () => {
@@ -254,6 +302,7 @@ export default function Dashboard() {
     const result = claimDailyCheckIn(username);
     setMythBalance(result.balance);
     setDailyClaimed(hasClaimedDailyCheckIn(username));
+    setDailyClaimRemainingMs(getDailyCheckInRemainingMs(username));
     if (result.claimed) {
       setCheckInNotice(t('dashboard.dailyClaimSuccess', { amount: result.amount }));
     }
@@ -269,13 +318,16 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-slate-900">
-      <header className="flex items-center justify-between px-6 py-4 bg-slate-800/50 backdrop-blur-sm">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">🦞</span>
-            <span className="text-xl font-bold text-white">{t('common.appName')}</span>
-          </Link>
-          <nav className="flex gap-4 ml-8">
+      <header className="flex items-start justify-between px-6 py-4 bg-slate-800/50 backdrop-blur-sm">
+        <div className="flex items-start gap-4">
+          <div className="flex flex-col items-start gap-2">
+            <Link href="/" className="flex items-center gap-2">
+              <span className="text-2xl">🦞</span>
+              <span className="text-xl font-bold text-white">{t('common.appName')}</span>
+            </Link>
+            <GlobalMythChip floating={false} />
+          </div>
+          <nav className="flex gap-4 ml-4 mt-1">
             <Link href="/dashboard" className="text-indigo-400 hover:text-indigo-300">
               {t('nav.dashboard')}
             </Link>
@@ -304,13 +356,19 @@ export default function Dashboard() {
 
       <main className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold text-white mb-4">{t('dashboard.title')}</h1>
+        <section className="mb-5 rounded-xl border border-amber-400/30 bg-slate-800/70 p-4">
+          <h2 className="text-sm font-semibold text-amber-200">{t('dashboard.economyTitle')}</h2>
+          <p className="mt-1 text-xs text-slate-300">{t('dashboard.economyLine1')}</p>
+          <p className="mt-1 text-xs text-slate-300">{t('dashboard.economyLine2')}</p>
+          <p className="mt-1 text-xs text-slate-300">{t('dashboard.economyLine3')}</p>
+        </section>
 
         <div className="mb-8 flex flex-wrap items-center gap-3">
           <span className="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 text-sm">
-            🧪 {t('dashboard.magicPotions', { count: potionCount })}
+            🧪 {t('dashboard.magicPotions', { count: magicPotionCount })}
           </span>
-          <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-sm">
-            💰 {t('dashboard.mythBalance', { amount: mythBalance })}
+          <span className="px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 text-sm">
+            ❤️ {t('dashboard.healthPotions', { count: healthPotionCount })}
           </span>
           <button
             onClick={handleDailyCheckIn}
@@ -322,7 +380,7 @@ export default function Dashboard() {
             }`}
           >
             {dailyClaimed
-              ? `✅ ${t('dashboard.dailyClaimed')}`
+              ? `✅ ${t('dashboard.dailyClaimed')}${dailyClaimRemainingMs > 0 ? ` ${formatCheckInCooldown(dailyClaimRemainingMs)}` : ''}`
               : `🎁 ${t('dashboard.dailyCheckIn', { amount: DAILY_CHECKIN_REWARD })}`}
           </button>
           <Link href="/gather" className="px-3 py-1 rounded-full bg-blue-600 hover:bg-blue-500 text-sm font-medium">
@@ -357,7 +415,7 @@ export default function Dashboard() {
             </button>
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {pets.map((pet) => {
               const cooldownRemainingMs = getBattleCooldownRemainingMs(pet.id, nowMs);
               const isCooldownActive = cooldownRemainingMs > 0;
@@ -367,26 +425,26 @@ export default function Dashboard() {
               return (
                 <div
                   key={pet.id}
-                  className={`bg-slate-800 rounded-2xl p-6 border-2 ${elementColors[pet.element[0]].border}`}
+                  className={`bg-slate-800 rounded-xl p-3 border-2 ${elementColors[pet.element[0]].border}`}
                 >
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex items-center gap-2">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center gap-1.5">
                       <div className="flex gap-1">
                         {pet.element.map((el, idx) => (
-                          <span key={idx} className="text-xl" title={t(`dashboard.element.${el}`)}>
+                          <span key={idx} className="text-sm" title={t(`dashboard.element.${el}`)}>
                             {elementColors[el].icon}
                           </span>
                         ))}
                       </div>
                       <div>
-                        <h3 className="text-xl font-bold text-white">{localizePetName(pet.name, t)}</h3>
-                        <span className={`text-sm ${elementColors[pet.element[0]].text}`}>
+                        <h3 className="text-base font-bold text-white">{localizePetName(pet.name, t)}</h3>
+                        <span className={`text-xs ${elementColors[pet.element[0]].text}`}>
                           {pet.element.map((e) => t(`dashboard.element.${e}`)).join('/')}
                         </span>
                       </div>
                     </div>
                     <span
-                      className={`px-2 py-1 rounded-full text-xs ${genderColors[pet.gender].bg} ${genderColors[pet.gender].color}`}
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] ${genderColors[pet.gender].bg} ${genderColors[pet.gender].color}`}
                     >
                       {pet.gender === 'male'
                         ? `♂ ${t('dashboard.gender.male')}`
@@ -394,12 +452,12 @@ export default function Dashboard() {
                     </span>
                   </div>
 
-                  <div className="text-center mb-4">
+                  <div className="text-center mb-2">
                     <div
-                      className={`inline-block text-8xl p-4 rounded-full ${genderColors[pet.gender].bg} ${
+                      className={`inline-block text-4xl p-2 rounded-full ${genderColors[pet.gender].bg} ${
                         pet.gender === 'female'
-                          ? 'ring-2 ring-purple-400/80 ring-offset-2 ring-offset-slate-900'
-                          : 'ring-2 ring-red-400/80 ring-offset-2 ring-offset-slate-900'
+                          ? 'ring-1 ring-purple-400/80 ring-offset-1 ring-offset-slate-900'
+                          : 'ring-1 ring-red-400/80 ring-offset-1 ring-offset-slate-900'
                       } hover:scale-110 transition-transform cursor-pointer animate-bounce-slow`}
                     >
                       <span className={`animate-wiggle inline-block ${pet.gender === 'female' ? 'female-lobster-body' : ''}`}>
@@ -407,9 +465,13 @@ export default function Dashboard() {
                       </span>
                     </div>
                     {pet.rarity !== 'common' && (
-                      <div className="flex justify-center gap-1 mt-2">
+                      <div className="flex justify-center gap-1 mt-1">
                         {[...Array(pet.rarity === 'legendary' ? 4 : pet.rarity === 'epic' ? 3 : 2)].map((_, i) => (
-                          <span key={i} className="text-amber-400 animate-pulse" style={{ animationDelay: `${i * 0.2}s` }}>
+                          <span
+                            key={i}
+                            className="text-amber-400 text-xs animate-pulse"
+                            style={{ animationDelay: `${i * 0.2}s` }}
+                          >
                             ✨
                           </span>
                         ))}
@@ -417,29 +479,29 @@ export default function Dashboard() {
                     )}
                   </div>
 
-                  <div className="text-center mb-4">
-                    <span className="text-2xl font-bold text-white">
+                  <div className="text-center mb-2">
+                    <span className="text-lg font-bold text-white">
                       {t('dashboard.pet.level')} {pet.level}
                     </span>
                     {pet.generation && (
-                      <span className="ml-2 px-2 py-1 bg-indigo-500/30 rounded text-sm text-indigo-300">
+                      <span className="ml-1 px-1.5 py-0.5 bg-indigo-500/30 rounded text-xs text-indigo-300">
                         {t('breed.generation', { gen: pet.generation })}
                       </span>
                     )}
-                    <span className="ml-2 px-2 py-1 bg-slate-700 rounded text-sm text-slate-300">
+                    <span className="ml-1 px-1.5 py-0.5 bg-slate-700 rounded text-xs text-slate-300">
                       {t(`dashboard.rarity.${pet.rarity}`)}
                     </span>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-1.5">
                     <div>
-                      <div className="flex justify-between text-sm mb-1">
+                      <div className="flex justify-between text-xs mb-0.5">
                         <span className="text-slate-400">{t('dashboard.pet.exp')}</span>
                         <span className="text-indigo-400">
                           {pet.exp}/{pet.maxExp}
                         </span>
                       </div>
-                      <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                      <div className="h-1 bg-slate-700 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-gradient-to-r from-indigo-500 to-purple-500"
                           style={{ width: `${(pet.exp / pet.maxExp) * 100}%` }}
@@ -448,58 +510,58 @@ export default function Dashboard() {
                     </div>
 
                     <div>
-                      <div className="flex justify-between text-sm mb-1">
+                      <div className="flex justify-between text-xs mb-0.5">
                         <span className="text-slate-400">{t('dashboard.pet.hp')}</span>
                         <span className="text-green-400">
                           {pet.hp}/{pet.maxHp}
                         </span>
                       </div>
-                      <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                      <div className="h-1 bg-slate-700 rounded-full overflow-hidden">
                         <div className="h-full bg-green-500" style={{ width: `${(pet.hp / pet.maxHp) * 100}%` }} />
                       </div>
                     </div>
 
                     <div>
-                      <div className="flex justify-between text-sm mb-1">
+                      <div className="flex justify-between text-xs mb-0.5">
                         <span className="text-slate-400">{t('dashboard.pet.mp')}</span>
                         <span className="text-cyan-400">
                           {pet.mp}/{pet.maxMp}
                         </span>
                       </div>
-                      <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                      <div className="h-1 bg-slate-700 rounded-full overflow-hidden">
                         <div className="h-full bg-cyan-500" style={{ width: `${(pet.mp / pet.maxMp) * 100}%` }} />
                       </div>
                     </div>
 
-                    <div className="flex justify-between">
+                    <div className="flex justify-between text-xs">
                       <span className="text-slate-400">{t('dashboard.attack')}</span>
-                      <span className="text-red-400 font-bold">{pet.attack}</span>
+                      <span className="text-red-400 font-semibold">{pet.attack}</span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between text-xs">
                       <span className="text-slate-400">{t('dashboard.defense')}</span>
-                      <span className="text-blue-400 font-bold">{pet.defense}</span>
+                      <span className="text-blue-400 font-semibold">{pet.defense}</span>
                     </div>
                   </div>
 
-                  <div className="flex gap-2 mt-6">
+                  <div className="flex gap-1 mt-3">
                     {isGathering ? (
                       <button
                         disabled
-                        className="flex-1 px-4 py-2 bg-slate-700 text-slate-500 rounded-lg text-center font-medium cursor-not-allowed"
+                        className="flex-1 px-2 py-1 bg-slate-700 text-slate-500 rounded-md text-xs text-center font-medium cursor-not-allowed"
                       >
                         🌊 {t('gather.busyButton')}
                       </button>
                     ) : isCooldownActive ? (
                       <button
                         disabled
-                        className="flex-1 px-4 py-2 bg-slate-700 text-slate-500 rounded-lg text-center font-medium cursor-not-allowed"
+                        className="flex-1 px-2 py-1 bg-slate-700 text-slate-500 rounded-md text-xs text-center font-medium cursor-not-allowed"
                       >
                         ⏳ {t('battle.cooldownButton', { time: formatCooldownTimer(cooldownRemainingMs) })}
                       </button>
                     ) : (
                       <Link
                         href={`/battle?petId=${pet.id}`}
-                        className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-center font-medium"
+                        className="flex-1 px-2 py-1 bg-red-600 hover:bg-red-500 rounded-md text-xs text-center font-medium"
                       >
                         ⚔️ {t('nav.battle')}
                       </Link>
@@ -508,48 +570,65 @@ export default function Dashboard() {
                     {isGathering ? (
                       <button
                         disabled
-                        className="flex-1 px-4 py-2 bg-slate-700 text-slate-500 rounded-lg text-center font-medium cursor-not-allowed"
+                        className="flex-1 px-2 py-1 bg-slate-700 text-slate-500 rounded-md text-xs text-center font-medium cursor-not-allowed"
                       >
                         🐣 {t('gather.busyBreed')}
                       </button>
                     ) : (
                       <Link
                         href="/breed"
-                        className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-center font-medium"
+                        className="flex-1 px-2 py-1 bg-purple-600 hover:bg-purple-500 rounded-md text-xs text-center font-medium"
                       >
                         🐣 {t('nav.breed')}
                       </Link>
                     )}
                   </div>
 
-                  <button
-                    onClick={() => handleUsePotion(pet.id)}
-                    disabled={potionCount <= 0 || pet.mp >= pet.maxMp || isGathering}
-                    className={`mt-2 w-full px-4 py-2 rounded-lg text-center font-medium ${
-                      potionCount <= 0 || pet.mp >= pet.maxMp || isGathering
-                        ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                        : 'bg-cyan-600 hover:bg-cyan-500'
-                    }`}
-                  >
-                    {isGathering
-                      ? `🌊 ${t('gather.busyPotion')}`
-                      : pet.mp >= pet.maxMp
-                        ? `✨ ${t('dashboard.magicFull')}`
-                        : `🧪 ${t('dashboard.usePotion')}`}
-                  </button>
+                  <div className="mt-1.5 grid grid-cols-2 gap-1">
+                    <button
+                      onClick={() => handleUsePotion(pet.id)}
+                      disabled={magicPotionCount <= 0 || pet.mp >= pet.maxMp || isGathering}
+                      className={`w-full px-2 py-1 rounded-md text-xs text-center font-medium ${
+                        magicPotionCount <= 0 || pet.mp >= pet.maxMp || isGathering
+                          ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                          : 'bg-cyan-600 hover:bg-cyan-500'
+                      }`}
+                    >
+                      {isGathering
+                        ? `🌊 ${t('gather.busyPotion')}`
+                        : pet.mp >= pet.maxMp
+                          ? `✨ ${t('dashboard.magicFull')}`
+                          : `🧪 ${t('dashboard.usePotion')}`}
+                    </button>
+                    <button
+                      onClick={() => handleUseHealthPotion(pet.id)}
+                      disabled={healthPotionCount <= 0 || pet.hp >= pet.maxHp || isGathering}
+                      className={`w-full px-2 py-1 rounded-md text-xs text-center font-medium ${
+                        healthPotionCount <= 0 || pet.hp >= pet.maxHp || isGathering
+                          ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                          : 'bg-rose-600 hover:bg-rose-500'
+                      }`}
+                    >
+                      {isGathering
+                        ? `🌊 ${t('gather.busyPotion')}`
+                        : pet.hp >= pet.maxHp
+                          ? `✨ ${t('dashboard.healthFull')}`
+                          : `❤️ ${t('dashboard.useHealthPotion')}`}
+                    </button>
+                  </div>
 
                   {isGathering && gatherTask && (
-                    <p className="mt-2 text-xs text-blue-300 text-center">
+                    <p className="mt-1 text-[11px] text-blue-300 text-center">
                       {t('gather.busyBadge', { time: formatCooldownTimer(Math.max(0, gatherTask.endsAt - nowMs)) })}
                     </p>
                   )}
                   {isGatherReady && (
-                    <p className="mt-2 text-xs text-emerald-300 text-center">
+                    <p className="mt-1 text-[11px] text-emerald-300 text-center">
                       {t('gather.readyBadge')}
                     </p>
                   )}
                   {!isGathering && isCooldownActive && (
-                    <p className="mt-2 text-xs text-slate-300 text-center">
+                    <p className="mt-1 text-[11px] text-slate-300 text-center">
                       {t('battle.cooldownNotice', { time: formatCooldownTimer(cooldownRemainingMs) })}
                     </p>
                   )}

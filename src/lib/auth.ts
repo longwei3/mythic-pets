@@ -1,10 +1,14 @@
+import { migrateToEncrypted, patchLocalStorage } from './secureStorage';
+
 export const AUTH_USERS_KEY = 'mythicpets-auth-users';
 export const AUTH_SESSION_KEY = 'mythicpets-auth-session';
+export const MAX_PLAYER_ID = 10000;
 
 export interface AuthUser {
   username: string;
   passwordHash: string;
   createdAt: number;
+  playerId: number;
 }
 
 export interface AuthSession {
@@ -16,6 +20,7 @@ export type AuthActionCode =
   | 'invalid-username'
   | 'invalid-password'
   | 'user-exists'
+  | 'user-limit'
   | 'user-not-found'
   | 'wrong-password';
 
@@ -30,6 +35,7 @@ const LEGACY_DATA_KEYS = [
   'generation1Count',
   'myListedPets',
   'mythicpets-magic-potions',
+  'mythicpets-health-potions',
   'mythicpets-gather-task',
 ];
 
@@ -51,6 +57,23 @@ function hashPassword(username: string, password: string): string {
   return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
+function compareByCreatedAtAndUsername(a: Pick<AuthUser, 'createdAt' | 'username'>, b: Pick<AuthUser, 'createdAt' | 'username'>): number {
+  if (a.createdAt !== b.createdAt) {
+    return a.createdAt - b.createdAt;
+  }
+  return a.username.localeCompare(b.username);
+}
+
+function normalizeAndAssignPlayerIds(users: Omit<AuthUser, 'playerId'>[] | AuthUser[]): AuthUser[] {
+  const sorted = [...users].sort(compareByCreatedAtAndUsername);
+  return sorted.map((user, index) => ({
+    username: user.username,
+    passwordHash: user.passwordHash,
+    createdAt: user.createdAt,
+    playerId: index + 1,
+  }));
+}
+
 function readAuthUsers(): AuthUser[] {
   if (!hasWindow()) {
     return [];
@@ -69,7 +92,7 @@ function readAuthUsers(): AuthUser[] {
     }
 
     const users = parsed.filter(
-      (item): item is AuthUser =>
+      (item): item is Omit<AuthUser, 'playerId'> | AuthUser =>
         item &&
         typeof item === 'object' &&
         typeof item.username === 'string' &&
@@ -77,10 +100,11 @@ function readAuthUsers(): AuthUser[] {
         typeof item.createdAt === 'number',
     );
 
-    if (users.length !== parsed.length) {
-      localStorage.setItem(AUTH_USERS_KEY, JSON.stringify(users));
+    const normalizedUsers = normalizeAndAssignPlayerIds(users);
+    if (users.length !== parsed.length || JSON.stringify(parsed) !== JSON.stringify(normalizedUsers)) {
+      localStorage.setItem(AUTH_USERS_KEY, JSON.stringify(normalizedUsers));
     }
-    return users;
+    return normalizedUsers;
   } catch {
     localStorage.removeItem(AUTH_USERS_KEY);
     return [];
@@ -211,20 +235,34 @@ export function registerWithPassword(username: string, password: string): AuthAc
   if (users.some((user) => user.username === normalized)) {
     return { ok: false, code: 'user-exists' };
   }
+  if (users.length >= MAX_PLAYER_ID) {
+    return { ok: false, code: 'user-limit' };
+  }
 
   const createdAt = Date.now();
-  const nextUsers: AuthUser[] = [
+  const nextUsers: AuthUser[] = normalizeAndAssignPlayerIds([
     {
       username: normalized,
       passwordHash: hashPassword(normalized, password),
       createdAt,
+      playerId: users.length + 1,
     },
     ...users,
-  ];
+  ]);
   writeAuthUsers(nextUsers);
   writeSession(normalized);
   migrateLegacyDataIfNeeded(normalized);
   return { ok: true, username: normalized };
+}
+
+export function readPlayerId(username?: string): number | null {
+  const normalized = normalizeUsername(username || getActiveProfileKey());
+  if (!normalized || normalized === 'guest') {
+    return null;
+  }
+  const users = readAuthUsers();
+  const found = users.find((user) => user.username === normalized);
+  return found?.playerId ?? null;
 }
 
 export function logoutAuthSession(): void {

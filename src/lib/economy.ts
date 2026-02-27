@@ -1,9 +1,10 @@
 export const MYTH_BALANCE_KEY = 'mythicpets-token-balance';
-export const MYTH_DAILY_CLAIM_DAY_KEY = 'mythicpets-token-daily-claim-day';
+export const MYTH_DAILY_CLAIM_AT_KEY = 'mythicpets-token-daily-claim-at';
 export const MYTH_TX_LOG_KEY = 'mythicpets-token-transactions';
 
-export const DAILY_CHECKIN_REWARD = 5;
-export const BATTLE_VICTORY_REWARD = 10;
+export const DAILY_CHECKIN_REWARD = 20;
+export const DAILY_CHECKIN_INTERVAL_MS = 12 * 60 * 60 * 1000;
+export const BATTLE_VICTORY_REWARD = 5;
 
 export type EconomyReason = 'daily-checkin' | 'battle-victory' | 'market-purchase' | 'system';
 
@@ -46,14 +47,6 @@ function sanitizeProfileKey(profileKey?: string): string {
 
 function scopedKey(base: string, profileKey?: string): string {
   return `${base}:${sanitizeProfileKey(profileKey)}`;
-}
-
-function toLocalDayStamp(timestamp = Date.now()): string {
-  const date = new Date(timestamp);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 function parseNonNegativeInteger(raw: string | null): number | null {
@@ -228,9 +221,36 @@ export function hasClaimedDailyCheckIn(profileKey?: string, now = Date.now()): b
     return true;
   }
 
-  const currentDay = toLocalDayStamp(now);
-  const claimedDay = localStorage.getItem(scopedKey(MYTH_DAILY_CLAIM_DAY_KEY, profileKey));
-  return claimedDay === currentDay;
+  const lastClaimRaw = localStorage.getItem(scopedKey(MYTH_DAILY_CLAIM_AT_KEY, profileKey));
+  if (!lastClaimRaw) {
+    return false;
+  }
+
+  const lastClaimAt = Number.parseInt(lastClaimRaw, 10);
+  if (!Number.isFinite(lastClaimAt) || lastClaimAt <= 0) {
+    return false;
+  }
+
+  return now - lastClaimAt < DAILY_CHECKIN_INTERVAL_MS;
+}
+
+export function getDailyCheckInRemainingMs(profileKey?: string, now = Date.now()): number {
+  if (!hasWindow()) {
+    return 0;
+  }
+
+  const lastClaimRaw = localStorage.getItem(scopedKey(MYTH_DAILY_CLAIM_AT_KEY, profileKey));
+  if (!lastClaimRaw) {
+    return 0;
+  }
+
+  const lastClaimAt = Number.parseInt(lastClaimRaw, 10);
+  if (!Number.isFinite(lastClaimAt) || lastClaimAt <= 0) {
+    return 0;
+  }
+
+  const elapsed = now - lastClaimAt;
+  return Math.max(0, DAILY_CHECKIN_INTERVAL_MS - elapsed);
 }
 
 export function claimDailyCheckIn(profileKey?: string, now = Date.now()): ClaimDailyResult {
@@ -250,8 +270,7 @@ export function claimDailyCheckIn(profileKey?: string, now = Date.now()): ClaimD
     };
   }
 
-  const day = toLocalDayStamp(now);
-  localStorage.setItem(scopedKey(MYTH_DAILY_CLAIM_DAY_KEY, profileKey), day);
+  localStorage.setItem(scopedKey(MYTH_DAILY_CLAIM_AT_KEY, profileKey), String(now));
 
   const result = grantMyth(DAILY_CHECKIN_REWARD, 'daily-checkin', profileKey, now);
   return {

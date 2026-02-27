@@ -581,3 +581,4 @@ Version: wagmi@2.19.5
  HEAD /adventure3d 200 in 951ms (compile: 420ms, render: 531ms)
  GET /adventure3d 200 in 273ms (compile: 65ms, render: 208ms)
 ✓ Finished filesystem cache database compaction in 10.6s
+  Reload env: .env.local

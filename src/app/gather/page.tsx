@@ -6,26 +6,36 @@ import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import AuthStatus from '@/components/AuthStatus';
 import RequireAuth from '@/components/RequireAuth';
+import GlobalMythChip from '@/components/GlobalMythChip';
 import { useAuth } from '@/components/AuthProvider';
 import { getScopedStorageKey } from '@/lib/auth';
 import { localizePetName } from '@/lib/petNames';
 import { formatCooldownTimer } from '@/lib/battleCooldown';
 import {
   GATHER_DURATION_MS,
+  addHealthPotion,
   addMagicPotion,
   clearGatherTask,
   readGatherTask,
+  readHealthPotionCount,
   readMagicPotionCount,
   writeGatherTask,
   type GatherTask,
 } from '@/lib/magicPotions';
+import { grantMyth, readMythBalance } from '@/lib/economy';
 import {
   playGatherReadySound,
   playGatherStartSound,
   startGatherAmbience,
   stopGatherAmbience,
 } from '@/lib/sounds';
-import { resolveExpProgress, scaleBaseStatByLevel } from '@/lib/petProgression';
+import {
+  applyExpGain,
+  applyStatGrowthByLevels,
+  getExpThresholdForLevel,
+  resolveExpProgress,
+  scaleBaseStatByLevel,
+} from '@/lib/petProgression';
 
 type Element = 'gold' | 'wood' | 'water' | 'fire' | 'earth';
 type Gender = 'male' | 'female';
@@ -36,6 +46,8 @@ interface Pet {
   element: Element[];
   gender: Gender;
   level: number;
+  exp?: number;
+  maxExp?: number;
   attack: number;
   defense: number;
   hp: number;
@@ -55,6 +67,12 @@ const elementIcons: Record<Element, string> = {
   earth: '🪨',
 };
 
+const GATHER_BASE_EXP_REWARD = 20;
+const GATHER_BASE_MYTH_REWARD = 20;
+const GATHER_LEVEL_BONUS_PER_LEVEL = 0.1;
+const GATHER_LEVELUP_ATTACK_GAIN = 2;
+const GATHER_LEVELUP_DEFENSE_GAIN = 2;
+
 export default function GatherPage() {
   const { t } = useTranslation();
   const { ready, isAuthenticated, username } = useAuth();
@@ -62,7 +80,10 @@ export default function GatherPage() {
   const [selectedPetId, setSelectedPetId] = useState<number | null>(null);
   const [task, setTask] = useState<GatherTask | null>(null);
   const [nowMs, setNowMs] = useState(Date.now());
-  const [potionCount, setPotionCount] = useState(0);
+  const [magicPotionCount, setMagicPotionCount] = useState(0);
+  const [healthPotionCount, setHealthPotionCount] = useState(0);
+  const [mythBalance, setMythBalance] = useState(0);
+  const [claimNotice, setClaimNotice] = useState<string | null>(null);
   const [readySoundPlayed, setReadySoundPlayed] = useState(false);
 
   const normalizeElements = (element: Element[] | Element | undefined): Element[] => {
@@ -71,6 +92,39 @@ export default function GatherPage() {
       (value): value is Element => typeof value === 'string' && VALID_ELEMENTS.includes(value as Element),
     );
     return normalized.length > 0 ? normalized : ['water'];
+  };
+
+  const normalizeStoredPet = (pet: any): Pet => {
+    const expProgress = resolveExpProgress(
+      typeof pet.level === 'number' && pet.level > 0 ? pet.level : 1,
+      typeof pet.exp === 'number' ? pet.exp : 0,
+    );
+    const maxHp =
+      typeof pet.maxHp === 'number' && pet.maxHp > 0
+        ? pet.maxHp
+        : typeof pet.hp === 'number' && pet.hp > 0
+          ? pet.hp
+          : scaleBaseStatByLevel(50, expProgress.level);
+    const maxMp =
+      typeof pet.maxMp === 'number' && pet.maxMp > 0
+        ? pet.maxMp
+        : typeof pet.mp === 'number' && pet.mp > 0
+          ? pet.mp
+          : scaleBaseStatByLevel(35, expProgress.level);
+
+    return {
+      ...pet,
+      element: normalizeElements(pet.element),
+      level: expProgress.level,
+      exp: expProgress.current,
+      maxExp: getExpThresholdForLevel(expProgress.level),
+      attack: typeof pet.attack === 'number' && pet.attack > 0 ? pet.attack : 15,
+      defense: typeof pet.defense === 'number' && pet.defense > 0 ? pet.defense : 10,
+      hp: typeof pet.hp === 'number' && pet.hp > 0 ? Math.min(pet.hp, maxHp) : maxHp,
+      maxHp,
+      mp: typeof pet.mp === 'number' && pet.mp >= 0 ? Math.min(pet.mp, maxMp) : maxMp,
+      maxMp,
+    } as Pet;
   };
 
   useEffect(() => {
@@ -90,33 +144,7 @@ export default function GatherPage() {
       if (rawPets) {
         const parsed = JSON.parse(rawPets);
         if (Array.isArray(parsed)) {
-          const normalizedPets = parsed.map((pet: any) => {
-            const expProgress = resolveExpProgress(
-              typeof pet.level === 'number' && pet.level > 0 ? pet.level : 1,
-              typeof pet.exp === 'number' ? pet.exp : 0,
-            );
-            return {
-              ...pet,
-              element: normalizeElements(pet.element),
-              level: expProgress.level,
-              attack: typeof pet.attack === 'number' && pet.attack > 0 ? pet.attack : 15,
-              defense: typeof pet.defense === 'number' && pet.defense > 0 ? pet.defense : 10,
-              hp: typeof pet.hp === 'number' && pet.hp > 0 ? pet.hp : 50,
-              maxHp:
-                typeof pet.maxHp === 'number' && pet.maxHp > 0
-                  ? pet.maxHp
-                  : typeof pet.hp === 'number' && pet.hp > 0
-                    ? pet.hp
-                    : scaleBaseStatByLevel(50, expProgress.level),
-              mp: typeof pet.mp === 'number' && pet.mp >= 0 ? pet.mp : 35,
-              maxMp:
-                typeof pet.maxMp === 'number' && pet.maxMp > 0
-                  ? pet.maxMp
-                  : typeof pet.mp === 'number' && pet.mp > 0
-                    ? pet.mp
-                    : scaleBaseStatByLevel(35, expProgress.level),
-            };
-          }) as Pet[];
+          const normalizedPets = parsed.map((pet: any) => normalizeStoredPet(pet));
           setPets(normalizedPets);
           if (!selectedPetId && normalizedPets.length > 0) {
             setSelectedPetId(normalizedPets[0].id);
@@ -127,7 +155,9 @@ export default function GatherPage() {
       // Ignore invalid local data.
     }
 
-    setPotionCount(readMagicPotionCount(username));
+    setMagicPotionCount(readMagicPotionCount(username));
+    setHealthPotionCount(readHealthPotionCount(username));
+    setMythBalance(readMythBalance(username));
     setTask(readGatherTask(username));
   }, [isAuthenticated, selectedPetId, username]);
 
@@ -160,6 +190,89 @@ export default function GatherPage() {
     };
   }, [isTaskReady, readySoundPlayed, task]);
 
+  useEffect(() => {
+    if (!claimNotice) {
+      return;
+    }
+    const timer = setTimeout(() => setClaimNotice(null), 3200);
+    return () => clearTimeout(timer);
+  }, [claimNotice]);
+
+  const applyGatherRewardsToPet = (petId: number, expGain: number) => {
+    if (!username) {
+      return;
+    }
+    const key = getScopedStorageKey('myPets', username);
+    const raw = localStorage.getItem(key);
+    if (!raw) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return;
+      }
+
+      const nextPets = parsed.map((pet: any) => {
+        if (Number(pet?.id) !== petId) {
+          return pet;
+        }
+
+        const level = typeof pet.level === 'number' && pet.level > 0 ? pet.level : 1;
+        const currentExp = typeof pet.exp === 'number' && pet.exp >= 0 ? pet.exp : 0;
+        const gained = applyExpGain(level, currentExp, expGain);
+
+        let nextAttack = typeof pet.attack === 'number' && pet.attack > 0 ? pet.attack : 15;
+        let nextDefense = typeof pet.defense === 'number' && pet.defense > 0 ? pet.defense : 10;
+        let nextMaxHp =
+          typeof pet.maxHp === 'number' && pet.maxHp > 0
+            ? pet.maxHp
+            : typeof pet.hp === 'number' && pet.hp > 0
+              ? pet.hp
+              : scaleBaseStatByLevel(50, gained.level);
+        let nextMaxMp =
+          typeof pet.maxMp === 'number' && pet.maxMp > 0
+            ? pet.maxMp
+            : typeof pet.mp === 'number' && pet.mp > 0
+              ? pet.mp
+              : scaleBaseStatByLevel(35, gained.level);
+        let nextHp = typeof pet.hp === 'number' && pet.hp >= 0 ? Math.min(pet.hp, nextMaxHp) : nextMaxHp;
+        let nextMp = typeof pet.mp === 'number' && pet.mp >= 0 ? Math.min(pet.mp, nextMaxMp) : nextMaxMp;
+
+        if (gained.levelUps > 0) {
+          nextAttack += GATHER_LEVELUP_ATTACK_GAIN * gained.levelUps;
+          nextDefense += GATHER_LEVELUP_DEFENSE_GAIN * gained.levelUps;
+
+          const previousMaxHp = nextMaxHp;
+          const previousMaxMp = nextMaxMp;
+          nextMaxHp = applyStatGrowthByLevels(nextMaxHp, gained.levelUps);
+          nextMaxMp = applyStatGrowthByLevels(nextMaxMp, gained.levelUps);
+          nextHp = Math.min(nextMaxHp, nextHp + Math.max(0, nextMaxHp - previousMaxHp));
+          nextMp = Math.min(nextMaxMp, nextMp + Math.max(0, nextMaxMp - previousMaxMp));
+        }
+
+        return {
+          ...pet,
+          level: gained.level,
+          exp: gained.exp,
+          maxExp: gained.nextExp,
+          attack: nextAttack,
+          defense: nextDefense,
+          hp: nextHp,
+          maxHp: nextMaxHp,
+          mp: nextMp,
+          maxMp: nextMaxMp,
+        };
+      });
+
+      localStorage.setItem(key, JSON.stringify(nextPets));
+      setPets(nextPets.map((pet: any) => normalizeStoredPet(pet)));
+    } catch {
+      // Ignore invalid local data.
+    }
+  };
+
   const handleStartGather = () => {
     if (!username) {
       return;
@@ -189,8 +302,27 @@ export default function GatherPage() {
       return;
     }
 
-    const nextCount = addMagicPotion(1, username);
-    setPotionCount(nextCount);
+    const rewardPet = pets.find((pet) => pet.id === task.petId) || activeTaskPet;
+    const petLevel = Math.max(1, rewardPet?.level || 1);
+    const levelMultiplier = 1 + (petLevel - 1) * GATHER_LEVEL_BONUS_PER_LEVEL;
+    const expReward = Math.max(1, Math.round(GATHER_BASE_EXP_REWARD * levelMultiplier));
+    const mythReward = Math.max(1, Math.round(GATHER_BASE_MYTH_REWARD * levelMultiplier));
+
+    const nextMagicPotionCount = addMagicPotion(1, username);
+    const nextHealthPotionCount = addHealthPotion(1, username);
+    setMagicPotionCount(nextMagicPotionCount);
+    setHealthPotionCount(nextHealthPotionCount);
+    applyGatherRewardsToPet(task.petId, expReward);
+    const mythResult = grantMyth(mythReward, 'system', username);
+    setMythBalance(mythResult.balance);
+    setClaimNotice(
+      t('gather.claimSummary', {
+        exp: expReward,
+        myth: mythReward,
+        magicPotions: 1,
+        healthPotions: 1,
+      }),
+    );
     clearGatherTask(username);
     setTask(null);
     setReadySoundPlayed(false);
@@ -220,13 +352,16 @@ export default function GatherPage() {
           }}
         />
       ))}
-      <header className="flex items-center justify-between px-6 py-4 bg-slate-800/50 backdrop-blur-sm">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">🦞</span>
-            <span className="text-xl font-bold text-white">{t('common.appName')}</span>
-          </Link>
-          <nav className="flex gap-4 ml-8">
+      <header className="flex items-start justify-between px-6 py-4 bg-slate-800/50 backdrop-blur-sm">
+        <div className="flex items-start gap-4">
+          <div className="flex flex-col items-start gap-2">
+            <Link href="/" className="flex items-center gap-2">
+              <span className="text-2xl">🦞</span>
+              <span className="text-xl font-bold text-white">{t('common.appName')}</span>
+            </Link>
+            <GlobalMythChip floating={false} />
+          </div>
+          <nav className="flex gap-4 ml-4 mt-1">
             <Link href="/dashboard" className="text-slate-400 hover:text-white">
               {t('nav.dashboard')}
             </Link>
@@ -257,10 +392,16 @@ export default function GatherPage() {
         <h1 className="text-3xl font-bold text-white text-center mb-4">🌊 {t('gather.title')}</h1>
         <p className="text-center text-slate-400 mb-6">{t('gather.subtitle')}</p>
 
-        <div className="flex justify-center mb-8">
+        <div className="flex justify-center gap-3 mb-8 flex-wrap">
           <span className="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 text-sm">
-            🧪 {t('dashboard.magicPotions', { count: potionCount })}
+            🧪 {t('dashboard.magicPotions', { count: magicPotionCount })}
           </span>
+          <span className="px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 text-sm">
+            ❤️ {t('dashboard.healthPotions', { count: healthPotionCount })}
+          </span>
+          {claimNotice && (
+            <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-sm">{claimNotice}</span>
+          )}
         </div>
 
         {pets.length === 0 ? (
@@ -323,6 +464,12 @@ export default function GatherPage() {
                     ⛏️ {t('gather.start')}
                   </button>
                   <p className="text-sm text-slate-400 mt-3">{t('gather.durationHint')}</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {t('gather.scalingHint', {
+                      exp: GATHER_BASE_EXP_REWARD,
+                      myth: GATHER_BASE_MYTH_REWARD,
+                    })}
+                  </p>
                 </div>
               </>
             )}

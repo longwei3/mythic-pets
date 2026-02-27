@@ -9,7 +9,7 @@ export default function AuthStatus() {
   const { t } = useTranslation();
   const pathname = usePathname();
   const router = useRouter();
-  const { ready, username, isAuthenticated, logout } = useAuth();
+  const { ready, username, playerId, isAuthenticated, logout } = useAuth();
 
   if (!ready) {
     return null;
@@ -26,9 +26,15 @@ export default function AuthStatus() {
     );
   }
 
+  const playerIdText = (playerId ?? 0).toString().padStart(5, '0');
+
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs sm:text-sm text-slate-200">👤 {username}</span>
+      <div className="flex flex-col leading-tight">
+        <span className="text-xs sm:text-sm text-slate-200">👤 {username}</span>
+        <span className="text-[10px] sm:text-xs text-slate-400">ID {playerIdText}</span>
+      </div>
+
       <button
         onClick={() => {
           logout();

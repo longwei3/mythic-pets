@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import GlobalMythChip from '@/components/GlobalMythChip';
 import { useAuth } from '@/components/AuthProvider';
 import {
   playAuthUiEffect,
@@ -77,8 +78,7 @@ function AuthPageContent() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [musicEnabled, setMusicEnabled] = useState(true);
-  const [fxEnabled, setFxEnabled] = useState(true);
+  const [audioEnabled, setAudioEnabled] = useState(true);
 
   const nextPath = useMemo(() => {
     const next = searchParams.get('next');
@@ -101,7 +101,7 @@ function AuthPageContent() {
 
     if (mode === 'register' && password !== confirmPassword) {
       setError(t('auth.passwordMismatch'));
-      if (fxEnabled) {
+      if (audioEnabled) {
         playAuthUiEffect('error');
       }
       return;
@@ -110,13 +110,13 @@ function AuthPageContent() {
     const result = mode === 'login' ? login(account, password) : register(account, password);
     if (!result.ok) {
       setError(translateAuthError(result.code));
-      if (fxEnabled) {
+      if (audioEnabled) {
         playAuthUiEffect('error');
       }
       return;
     }
 
-    if (fxEnabled) {
+    if (audioEnabled) {
       playAuthUiEffect('success');
     }
     router.replace(nextPath);
@@ -124,23 +124,17 @@ function AuthPageContent() {
 
   useEffect(() => {
     const unlockAudio = () => {
-      if (musicEnabled) {
+      if (audioEnabled) {
         startAuthShowcaseMusic();
-      }
-      if (fxEnabled) {
         startAuthShowcaseEffects();
       }
     };
 
-    if (musicEnabled) {
+    if (audioEnabled) {
       startAuthShowcaseMusic();
-    } else {
-      stopAuthShowcaseMusic();
-    }
-
-    if (fxEnabled) {
       startAuthShowcaseEffects();
     } else {
+      stopAuthShowcaseMusic();
       stopAuthShowcaseEffects();
     }
 
@@ -153,7 +147,7 @@ function AuthPageContent() {
       stopAuthShowcaseMusic();
       stopAuthShowcaseEffects();
     };
-  }, [fxEnabled, musicEnabled]);
+  }, [audioEnabled]);
 
   const renderShowcaseBackground = () => (
     <>
@@ -197,35 +191,28 @@ function AuthPageContent() {
   return (
     <div className="min-h-screen relative overflow-hidden bg-slate-950">
       {renderShowcaseBackground()}
-      <header className="relative z-10 flex items-center justify-between px-6 py-4">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="text-3xl drop-shadow-[0_0_14px_rgba(99,102,241,0.65)]">🦞</span>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-300 via-indigo-300 to-fuchsia-300 bg-clip-text text-transparent">
-            {t('common.appName')}
-          </h1>
-        </Link>
+      <header className="relative z-10 flex items-start justify-between px-6 py-4">
+        <div className="flex flex-col items-start gap-2">
+          <Link href="/" className="flex items-center gap-2">
+            <span className="text-3xl drop-shadow-[0_0_14px_rgba(99,102,241,0.65)]">🦞</span>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-300 via-indigo-300 to-fuchsia-300 bg-clip-text text-transparent">
+              {t('common.appName')}
+            </h1>
+          </Link>
+          <GlobalMythChip floating={false} />
+        </div>
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => {
-              setMusicEnabled((prev) => !prev);
-              if (fxEnabled) {
+              if (audioEnabled) {
                 playAuthUiEffect('switch');
               }
-            }}
-            className="px-3 py-2 rounded-lg bg-slate-800/70 border border-slate-600 hover:border-cyan-400 text-xs sm:text-sm"
-          >
-            {musicEnabled ? `🎹 ${t('auth.musicOn')}` : `🔇 ${t('auth.musicOff')}`}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setFxEnabled((prev) => !prev);
-              playAuthUiEffect('switch');
+              setAudioEnabled((prev) => !prev);
             }}
             className="px-3 py-2 rounded-lg bg-slate-800/70 border border-slate-600 hover:border-fuchsia-400 text-xs sm:text-sm"
           >
-            {fxEnabled ? `✨ ${t('auth.fxOn')}` : `🔕 ${t('auth.fxOff')}`}
+            {audioEnabled ? `🔊 ${t('auth.audioOn')}` : `🔇 ${t('auth.audioOff')}`}
           </button>
           <LanguageSwitcher />
         </div>
@@ -306,7 +293,7 @@ function AuthPageContent() {
               <button
                 type="submit"
                 onMouseEnter={() => {
-                  if (fxEnabled) {
+                  if (audioEnabled) {
                     playAuthUiEffect('switch');
                   }
                 }}
@@ -325,7 +312,7 @@ function AuthPageContent() {
                 onClick={() => {
                   setMode(mode === 'login' ? 'register' : 'login');
                   setError(null);
-                  if (fxEnabled) {
+                  if (audioEnabled) {
                     playAuthUiEffect('switch');
                   }
                 }}

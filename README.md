@@ -34,3 +34,33 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Cloud Backup (Supabase)
+
+This project supports cloud save via Supabase.
+
+1. Set environment variables in `.env.local`:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+```
+
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` is also supported for compatibility.
+
+2. Run `supabase-schema.sql` in your Supabase SQL Editor (at least `game_state` table is required).
+3. Verify config from terminal:
+
+```bash
+npm run cloud:check
+```
+
+If you see `Result: OK`, cloud backup is ready.
+
+## Cloud Backup Without Key (Auto)
+
+If Supabase key setup fails, the app now has a no-key cloud backup fallback:
+
+- Logged-in users auto-upload encrypted backup every 60 seconds.
+- Backup also runs when the tab becomes hidden.
+- You can still manually upload/restore from the backup panel.
