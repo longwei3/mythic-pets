@@ -1056,6 +1056,89 @@ export default function Battle() {
           </div>
         </div>
 
+        <section className="max-w-6xl mx-auto mb-4 p-3 rounded-xl border border-slate-700 bg-slate-800/45">
+          <div className="grid lg:grid-cols-[1.3fr,1fr] gap-3">
+            <div className="rounded-lg border border-slate-700 bg-slate-900/70 p-3">
+              {battleState === 'fighting' ? (
+                <>
+                  {battleMode === 'pvp' && (
+                    <p className="text-xs text-indigo-300 mb-2">
+                      {t('battle.pvpTurn', { name: resolvePetName(activePvpAttacker) })}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => attack(false)}
+                      className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-all hover:scale-105"
+                    >
+                      ⚔️ {t('battle.attack')}
+                    </button>
+                    <button
+                      onClick={() => attack(true)}
+                      disabled={activeSkillMp < SPECIAL_SKILL_MP_COST}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                        activeSkillMp < SPECIAL_SKILL_MP_COST
+                          ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                          : 'bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 hover:scale-105'
+                      }`}
+                    >
+                      {activeSkillMp < SPECIAL_SKILL_MP_COST
+                        ? `🧪 ${t('battle.needMana', { cost: SPECIAL_SKILL_MP_COST })}`
+                        : `🔥 ${t('battle.special')}`}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-slate-400">{t('battle.rosterHint')}</p>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-slate-700 bg-slate-900/70 p-2.5">
+              <p className="text-[11px] text-slate-300 mb-2">🧪 {t('battle.potionPanelTitle')}</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-md border border-cyan-500/35 bg-slate-900/70 p-2">
+                  <p className="text-[10px] text-cyan-200">
+                    {t('battle.magicPotionCount', { count: magicPotionCount })}
+                  </p>
+                  <button
+                    onClick={handleUseMagicPotion}
+                    disabled={battleMode === 'pvp' || magicPotionCount <= 0 || playerPet.mp >= playerPet.maxMp}
+                    className={`mt-1.5 w-full rounded-md px-2 py-1 text-[10px] font-medium ${
+                      battleMode === 'pvp' || magicPotionCount <= 0 || playerPet.mp >= playerPet.maxMp
+                        ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                        : 'bg-cyan-600 hover:bg-cyan-500 text-white'
+                    }`}
+                  >
+                    {t('battle.useMagicPotion')}
+                  </button>
+                </div>
+
+                <div className="rounded-md border border-rose-500/35 bg-slate-900/70 p-2">
+                  <p className="text-[10px] text-rose-200">
+                    {t('battle.healthPotionCount', { count: healthPotionCount })}
+                  </p>
+                  <button
+                    onClick={handleUseHealthPotion}
+                    disabled={battleMode === 'pvp' || healthPotionCount <= 0 || playerPet.hp >= playerPet.maxHp}
+                    className={`mt-1.5 w-full rounded-md px-2 py-1 text-[10px] font-medium ${
+                      battleMode === 'pvp' || healthPotionCount <= 0 || playerPet.hp >= playerPet.maxHp
+                        ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                        : 'bg-rose-600 hover:bg-rose-500 text-white'
+                    }`}
+                  >
+                    {t('battle.useHealthPotion')}
+                  </button>
+                </div>
+              </div>
+              {potionNotice && (
+                <p className={`mt-2 text-[11px] ${potionNotice.type === 'success' ? 'text-emerald-300' : 'text-red-300'}`}>
+                  {potionNotice.text}
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+
         <section className="max-w-6xl mx-auto mb-8 p-3 rounded-2xl border border-slate-700 bg-slate-800/40">
           <div className="flex items-center justify-between gap-3 mb-4">
             <h2 className="text-base font-semibold text-white">🦞 {t('battle.rosterTitle')}</h2>
@@ -1153,57 +1236,6 @@ export default function Battle() {
           )}
         </section>
 
-        <section className="max-w-3xl mx-auto mb-8 p-4 rounded-xl border border-slate-700 bg-slate-800/50">
-          <h2 className="text-sm font-semibold text-white mb-3">🧪 {t('battle.potionPanelTitle')}</h2>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <div className="rounded-lg border border-cyan-500/40 bg-slate-900/70 p-3">
-              <p className="text-xs text-cyan-200 font-medium">
-                {t('battle.magicPotionCount', { count: magicPotionCount })}
-              </p>
-              <p className="text-[11px] text-slate-400 mt-1">
-                {t('battle.magicPotionRecover', { amount: BATTLE_MAGIC_POTION_RECOVERY })}
-              </p>
-              <button
-                onClick={handleUseMagicPotion}
-                disabled={battleMode === 'pvp' || magicPotionCount <= 0 || playerPet.mp >= playerPet.maxMp}
-                className={`mt-2 w-full rounded-lg px-3 py-1.5 text-xs font-medium ${
-                  battleMode === 'pvp' || magicPotionCount <= 0 || playerPet.mp >= playerPet.maxMp
-                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                    : 'bg-cyan-600 hover:bg-cyan-500 text-white'
-                }`}
-              >
-                {t('battle.useMagicPotion')}
-              </button>
-            </div>
-
-            <div className="rounded-lg border border-rose-500/40 bg-slate-900/70 p-3">
-              <p className="text-xs text-rose-200 font-medium">
-                {t('battle.healthPotionCount', { count: healthPotionCount })}
-              </p>
-              <p className="text-[11px] text-slate-400 mt-1">
-                {t('battle.healthPotionRecover', { amount: BATTLE_HEALTH_POTION_RECOVERY })}
-              </p>
-              <button
-                onClick={handleUseHealthPotion}
-                disabled={battleMode === 'pvp' || healthPotionCount <= 0 || playerPet.hp >= playerPet.maxHp}
-                className={`mt-2 w-full rounded-lg px-3 py-1.5 text-xs font-medium ${
-                  battleMode === 'pvp' || healthPotionCount <= 0 || playerPet.hp >= playerPet.maxHp
-                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                    : 'bg-rose-600 hover:bg-rose-500 text-white'
-                }`}
-              >
-                {t('battle.useHealthPotion')}
-              </button>
-            </div>
-          </div>
-          <p className="mt-2 text-[11px] text-slate-400">{t('battle.potionPanelHint')}</p>
-          {potionNotice && (
-            <p className={`mt-2 text-xs ${potionNotice.type === 'success' ? 'text-emerald-300' : 'text-red-300'}`}>
-              {potionNotice.text}
-            </p>
-          )}
-        </section>
-
         {battleState === 'idle' && (
           <div className="text-center">
             <div className="max-w-3xl mx-auto mb-5 p-4 rounded-xl border border-slate-700 bg-slate-800/50">
@@ -1288,37 +1320,6 @@ export default function Battle() {
             {battleMode === 'pve' && isCooldownActive && (
               <p className="mt-3 text-sm text-slate-300">{t('battle.cooldownNotice', { time: cooldownLabel })}</p>
             )}
-          </div>
-        )}
-
-        {battleState === 'fighting' && (
-          <div className="text-center">
-            {battleMode === 'pvp' && (
-              <p className="text-sm text-indigo-300 mb-4">
-                {t('battle.pvpTurn', { name: resolvePetName(activePvpAttacker) })}
-              </p>
-            )}
-            <div className="flex justify-center gap-4">
-              <button
-                onClick={() => attack(false)}
-                className="px-8 py-4 bg-slate-700 hover:bg-slate-600 rounded-xl text-lg font-medium transition-all hover:scale-105"
-              >
-                ⚔️ {t('battle.attack')}
-              </button>
-              <button
-                onClick={() => attack(true)}
-                disabled={activeSkillMp < SPECIAL_SKILL_MP_COST}
-                className={`px-8 py-4 rounded-xl text-lg font-medium transition-all ${
-                  activeSkillMp < SPECIAL_SKILL_MP_COST
-                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 hover:scale-105 animate-pulse'
-                }`}
-              >
-                {activeSkillMp < SPECIAL_SKILL_MP_COST
-                  ? `🧪 ${t('battle.needMana', { cost: SPECIAL_SKILL_MP_COST })}`
-                  : `🔥 ${t('battle.special')}`}
-              </button>
-            </div>
           </div>
         )}
 

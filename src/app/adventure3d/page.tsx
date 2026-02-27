@@ -94,6 +94,13 @@ interface AdventureOwnedPet {
 }
 
 const VALID_ELEMENTS: PetElement[] = ['gold', 'wood', 'water', 'fire', 'earth'];
+const PET_ELEMENT_ICONS: Record<PetElement, string> = {
+  gold: '🪙',
+  wood: '🪵',
+  water: '💧',
+  fire: '🔥',
+  earth: '🪨',
+};
 
 function normalizeElements(raw: unknown): PetElement[] {
   const list = Array.isArray(raw) ? raw : [raw];
@@ -177,6 +184,10 @@ function writeAdventureOwnedPets(pets: AdventureOwnedPet[], profileKey?: string)
     return;
   }
   localStorage.setItem(getScopedStorageKey('myPets', profileKey), JSON.stringify(pets));
+}
+
+function clampPercent(value: number): number {
+  return Math.max(0, Math.min(100, value));
 }
 
 function getAdventureCooldownKey(profileKey?: string): string {
@@ -944,6 +955,20 @@ export default function Adventure3DPage() {
     });
   };
 
+  useEffect(() => {
+    if (input.magicPotionNonce === 0) {
+      return;
+    }
+    handleUseMagicPotion();
+  }, [input.magicPotionNonce]);
+
+  useEffect(() => {
+    if (input.healthPotionNonce === 0) {
+      return;
+    }
+    handleUseHealthPotion();
+  }, [input.healthPotionNonce]);
+
   const handleQualityToggle = () => {
     if (!username || !profile) {
       return;
@@ -1083,7 +1108,7 @@ export default function Adventure3DPage() {
                     className="flex w-full items-center justify-between rounded-md bg-cyan-600/90 px-2 py-1.5 text-xs font-semibold text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <span>🧪 {t('adventure3d.magicPotionLabel', { count: magicPotionCount })}</span>
-                    <span>+{ADVENTURE_MAGIC_POTION_RECOVERY}</span>
+                    <span className="text-[11px] text-cyan-100">E · +{ADVENTURE_MAGIC_POTION_RECOVERY}</span>
                   </button>
                   <button
                     type="button"
@@ -1092,7 +1117,7 @@ export default function Adventure3DPage() {
                     className="flex w-full items-center justify-between rounded-md bg-rose-600/90 px-2 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <span>❤️ {t('adventure3d.healthPotionLabel', { count: healthPotionCount })}</span>
-                    <span>+{ADVENTURE_HEALTH_POTION_RECOVERY}</span>
+                    <span className="text-[11px] text-rose-100">R · +{ADVENTURE_HEALTH_POTION_RECOVERY}</span>
                   </button>
                 </div>
                 {potionNotice && (
@@ -1115,20 +1140,96 @@ export default function Adventure3DPage() {
                 <p className="text-xs text-slate-400">{t('adventure3d.petSelectorEmpty')}</p>
               ) : (
                 <div className="space-y-2">
-                  <select
-                    value={selectedPetId ?? ''}
-                    onChange={(event) => {
-                      const value = Number.parseInt(event.target.value, 10);
-                      setSelectedPetId(Number.isNaN(value) ? null : value);
-                    }}
-                    className="w-full rounded-md border border-slate-600 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-cyan-500"
-                  >
-                    {ownedPets.map((pet) => (
-                      <option key={`adventure-pet-${pet.id}`} value={pet.id}>
-                        {localizePetName(pet.name || pet.nameKey, t)} · Lv.{pet.level}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="h-44 overflow-y-auto pr-1">
+                    <div className="grid grid-cols-2 gap-2">
+                      {ownedPets.map((pet) => {
+                        const selected = pet.id === selectedPetId;
+                        const shownPet = selected
+                          ? {
+                              ...pet,
+                              level: Math.max(1, Math.round(world.player.level)),
+                              hp: Math.max(0, Math.round(world.player.hp)),
+                              maxHp: Math.max(1, Math.round(world.player.maxHp)),
+                              mp: Math.max(0, Math.round(world.player.energy)),
+                              maxMp: Math.max(1, Math.round(world.player.maxEnergy)),
+                              attack: Math.max(1, Math.round(world.player.attack)),
+                              defense: Math.max(1, Math.round(world.player.defense)),
+                            }
+                          : pet;
+                        const hpPercent = clampPercent((shownPet.hp / Math.max(1, shownPet.maxHp)) * 100);
+                        const mpPercent = clampPercent((shownPet.mp / Math.max(1, shownPet.maxMp)) * 100);
+
+                        return (
+                          <button
+                            key={`adventure-pet-card-${pet.id}`}
+                            type="button"
+                            onClick={() => setSelectedPetId(pet.id)}
+                            className={`text-left p-2 rounded-lg border transition-all ${
+                              selected
+                                ? 'border-indigo-400 bg-indigo-500/20 shadow-[0_0_0_1px_rgba(129,140,248,0.5)]'
+                                : 'border-slate-600 bg-slate-900/80'
+                            } ${
+                              'hover:border-indigo-300 hover:bg-slate-800/90'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-1.5 mb-1.5">
+                              <div className="min-w-0">
+                                <p className="truncate text-[11px] font-semibold text-white">
+                                  {localizePetName(pet.name || pet.nameKey, t)}
+                                </p>
+                                <p className="text-[10px] text-slate-300">
+                                  Lv.{shownPet.level} · {shownPet.element.map((el) => t(`dashboard.element.${el}`)).join('/')}
+                                </p>
+                              </div>
+                              <div className="flex gap-1 flex-wrap justify-end">
+                                {selected && (
+                                  <span className="px-1.5 py-0.5 rounded bg-indigo-500/30 text-indigo-200 text-[10px]">
+                                    {t('battle.selectedBadge')}
+                                  </span>
+                                )}
+                                {selected && (
+                                  <span className="px-1.5 py-0.5 rounded bg-cyan-500/25 text-cyan-200 text-[10px]">
+                                    {t(`adventure3d.phaseMap.${world.run.phase}`)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1 mb-1">
+                              {shownPet.element.map((el) => (
+                                <span key={`adv-pet-el-${shownPet.id}-${el}`} className="text-[10px] text-slate-300">
+                                  {PET_ELEMENT_ICONS[el]}
+                                </span>
+                              ))}
+                            </div>
+
+                            <p className="text-[10px] text-slate-400 mb-1">
+                              {t('dashboard.attack')} {shownPet.attack} • {t('dashboard.defense')} {shownPet.defense}
+                            </p>
+
+                            <div className="space-y-1">
+                              <div>
+                                <div className="w-full h-1 bg-slate-700 rounded-full overflow-hidden">
+                                  <div className="h-full bg-green-500" style={{ width: `${hpPercent}%` }} />
+                                </div>
+                                <p className="text-[10px] text-green-300 mt-0.5">
+                                  {t('battle.hp')}: {shownPet.hp}/{shownPet.maxHp}
+                                </p>
+                              </div>
+                              <div>
+                                <div className="w-full h-1 bg-slate-700 rounded-full overflow-hidden">
+                                  <div className="h-full bg-cyan-500" style={{ width: `${mpPercent}%` }} />
+                                </div>
+                                <p className="text-[10px] text-cyan-300 mt-0.5">
+                                  {t('battle.mp')}: {shownPet.mp}/{shownPet.maxMp}
+                                </p>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                   {selectedPet && (
                     <p className="text-xs text-slate-400">
                       HP {selectedPet.hp}/{selectedPet.maxHp} · MP {selectedPet.mp}/{selectedPet.maxMp}

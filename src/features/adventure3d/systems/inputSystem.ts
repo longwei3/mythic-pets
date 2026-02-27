@@ -8,6 +8,8 @@ interface AdventureInputSnapshot {
   jumpNonce: number;
   attackNonce: number;
   gatherNonce: number;
+  magicPotionNonce: number;
+  healthPotionNonce: number;
   targetNonce: number;
   viewToggleNonce: number;
 }
@@ -27,6 +29,8 @@ export function useAdventureInput(enabled: boolean): AdventureInputSnapshot {
   const [jumpNonce, setJumpNonce] = useState(0);
   const [attackNonce, setAttackNonce] = useState(0);
   const [gatherNonce, setGatherNonce] = useState(0);
+  const [magicPotionNonce, setMagicPotionNonce] = useState(0);
+  const [healthPotionNonce, setHealthPotionNonce] = useState(0);
   const [targetNonce, setTargetNonce] = useState(0);
   const [viewToggleNonce, setViewToggleNonce] = useState(0);
 
@@ -62,8 +66,14 @@ export function useAdventureInput(enabled: boolean): AdventureInputSnapshot {
       if (!event.repeat && event.code === 'KeyJ') {
         setAttackNonce((prev) => prev + 1);
       }
-      if (!event.repeat && event.code === 'KeyE') {
+      if (!event.repeat && event.code === 'KeyG') {
         setGatherNonce((prev) => prev + 1);
+      }
+      if (!event.repeat && event.code === 'KeyE') {
+        setMagicPotionNonce((prev) => prev + 1);
+      }
+      if (!event.repeat && event.code === 'KeyR') {
+        setHealthPotionNonce((prev) => prev + 1);
       }
       if (!event.repeat && event.code === 'Tab') {
         event.preventDefault();
@@ -114,9 +124,11 @@ export function useAdventureInput(enabled: boolean): AdventureInputSnapshot {
       jumpNonce,
       attackNonce,
       gatherNonce,
+      magicPotionNonce,
+      healthPotionNonce,
       targetNonce,
       viewToggleNonce,
     }),
-    [jumpNonce, attackNonce, gatherNonce, targetNonce, viewToggleNonce],
+    [jumpNonce, attackNonce, gatherNonce, magicPotionNonce, healthPotionNonce, targetNonce, viewToggleNonce],
   );
 }

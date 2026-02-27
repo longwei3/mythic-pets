@@ -332,7 +332,7 @@ export default {
     clickToEngage: 'Click the 3D view to enter game mode (keys become active immediately)',
     gameModeOn: 'Game Mode: ON (Esc to exit)',
     gameModeOff: 'Game Mode: OFF',
-    controls: 'Controls: WASD camera-relative movement, mouse-look, left click fire, Shift sprint, Space jump, E gather, Tab switch target, V toggle FPS/TPS',
+    controls: 'Controls: WASD camera-relative movement, mouse-look, left click fire, Shift sprint, Space jump, G gather, E use magic potion, R use health potion, Tab switch target, V toggle FPS/TPS',
     controlsHint: 'Mouse is pointer-locked in game mode for Peace Elite style TPS controls; press Esc to exit and unlock cursor.',
     resultWin: 'Run Complete',
     resultFail: 'Run Failed',

@@ -260,6 +260,8 @@ function AuthPageContent() {
                   value={account}
                   onChange={(event) => setAccount(event.target.value)}
                   autoComplete="username"
+                  minLength={3}
+                  maxLength={11}
                   placeholder={t('auth.usernamePlaceholder')}
                   className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-slate-100 focus:outline-none focus:border-indigo-400"
                 />
@@ -275,6 +277,8 @@ function AuthPageContent() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                  minLength={3}
+                  maxLength={11}
                   placeholder={t('auth.passwordPlaceholder')}
                   className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-slate-100 focus:outline-none focus:border-indigo-400"
                 />
@@ -291,6 +295,8 @@ function AuthPageContent() {
                     value={confirmPassword}
                     onChange={(event) => setConfirmPassword(event.target.value)}
                     autoComplete="new-password"
+                    minLength={3}
+                    maxLength={11}
                     placeholder={t('auth.confirmPasswordPlaceholder')}
                     className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-600 text-slate-100 focus:outline-none focus:border-indigo-400"
                   />

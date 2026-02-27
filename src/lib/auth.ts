@@ -10,6 +10,8 @@ const ENCRYPTION_KEY_PREFIX = 'mythic-pets-secure-v1';
 const AUTH_CLOUD_KEY = 'auth-user-v1';
 const AUTH_PLAYER_ID_COUNTER_USER = '__system__';
 const AUTH_PLAYER_ID_COUNTER_KEY = 'auth-player-id-counter-v1';
+const STARTER_ELEMENTS = ['gold', 'wood', 'water', 'fire', 'earth'] as const;
+type StarterElement = (typeof STARTER_ELEMENTS)[number];
 
 export interface AuthUser {
   username: string;
@@ -57,6 +59,88 @@ const LEGACY_DATA_KEYS = [
 
 function hasWindow(): boolean {
   return typeof window !== 'undefined';
+}
+
+function shuffleArray<T>(items: readonly T[]): T[] {
+  const next = [...items];
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  return next;
+}
+
+function createStarterPets(): Array<Record<string, unknown>> {
+  const shuffled = shuffleArray(STARTER_ELEMENTS);
+  const maleElements: StarterElement[] = [shuffled[0], shuffled[1], shuffled[2]];
+  const femaleElements: StarterElement[] = [shuffled[2], shuffled[3], shuffled[4]];
+
+  return [
+    {
+      id: 1,
+      name: 'Lobster One',
+      element: maleElements,
+      gender: 'male',
+      level: 1,
+      exp: 0,
+      maxExp: 100,
+      attack: 20,
+      defense: 10,
+      hp: 50,
+      maxHp: 50,
+      mp: 40,
+      maxMp: 40,
+      rarity: 'common',
+      generation: 1,
+    },
+    {
+      id: 2,
+      name: 'Lobster Two',
+      element: femaleElements,
+      gender: 'female',
+      level: 1,
+      exp: 0,
+      maxExp: 100,
+      attack: 18,
+      defense: 12,
+      hp: 55,
+      maxHp: 55,
+      mp: 45,
+      maxMp: 45,
+      rarity: 'common',
+      generation: 1,
+    },
+  ];
+}
+
+export function ensureStarterPetsForUser(username: string): void {
+  if (!hasWindow()) {
+    return;
+  }
+
+  const normalized = normalizeUsername(username);
+  if (!normalized || normalized === 'guest') {
+    return;
+  }
+
+  const myPetsKey = getScopedStorageKey('myPets', normalized);
+  const existing = localStorage.getItem(myPetsKey);
+  if (existing) {
+    try {
+      const parsed = JSON.parse(existing);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return;
+      }
+    } catch {
+      // invalid existing value: overwrite with starter pets
+    }
+  }
+
+  localStorage.setItem(myPetsKey, JSON.stringify(createStarterPets()));
+  const generationKey = getScopedStorageKey('generation1Count', normalized);
+  const currentCount = Number.parseInt(localStorage.getItem(generationKey) || '0', 10);
+  const nextCount = Number.isFinite(currentCount) && currentCount >= 0 ? currentCount + 1 : 1;
+  localStorage.setItem(generationKey, String(nextCount));
 }
 
 function normalizeUsername(raw: string): string {
@@ -566,6 +650,7 @@ export function loginWithPassword(username: string, password: string): AuthActio
 
   writeSession(normalized);
   migrateLegacyDataIfNeeded(normalized);
+  ensureStarterPetsForUser(normalized);
   return { ok: true, username: normalized };
 }
 
@@ -643,6 +728,7 @@ export async function loginWithCloudCheck(username: string, password: string): P
 
     writeSession(normalized);
     migrateLegacyDataIfNeeded(normalized);
+    ensureStarterPetsForUser(normalized);
     return { ok: true, username: normalized };
   } catch (error) {
     console.warn('Cloud auth check failed:', error);
@@ -681,6 +767,7 @@ export function registerWithPassword(username: string, password: string): AuthAc
   writeAuthUsers(nextUsers);
   writeSession(normalized);
   migrateLegacyDataIfNeeded(normalized);
+  ensureStarterPetsForUser(normalized);
   return { ok: true, username: normalized };
 }
 

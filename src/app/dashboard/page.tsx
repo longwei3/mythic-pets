@@ -8,7 +8,7 @@ import AuthStatus from '@/components/AuthStatus';
 import RequireAuth from '@/components/RequireAuth';
 import GlobalMythChip from '@/components/GlobalMythChip';
 import { useAuth } from '@/components/AuthProvider';
-import { getScopedStorageKey } from '@/lib/auth';
+import { ensureStarterPetsForUser, getScopedStorageKey } from '@/lib/auth';
 import { localizePetName } from '@/lib/petNames';
 import { formatCooldownTimer, getBattleCooldownRemainingMs } from '@/lib/battleCooldown';
 import {
@@ -140,9 +140,8 @@ export default function Dashboard() {
     }
 
     const myPetsKey = getScopedStorageKey('myPets', username);
-    const generationKey = getScopedStorageKey('generation1Count', username);
+    ensureStarterPetsForUser(username);
     const savedPets = localStorage.getItem(myPetsKey);
-    const generation1Count = Number.parseInt(localStorage.getItem(generationKey) || '0', 10);
 
     if (savedPets) {
       try {
@@ -152,54 +151,8 @@ export default function Dashboard() {
         localStorage.setItem(myPetsKey, JSON.stringify(migratedPets));
       } catch {
         localStorage.removeItem(myPetsKey);
-        localStorage.removeItem(generationKey);
+        setPets([]);
       }
-    } else {
-      if (generation1Count >= 200) {
-        alert(t('dashboard.starterSoldOut'));
-        return;
-      }
-
-      const starterPets: Pet[] = [
-        {
-          id: 1,
-          name: 'Fire Lob',
-          element: ['fire', 'water', 'earth'],
-          gender: 'male',
-          level: 1,
-          exp: 0,
-          maxExp: 100,
-          attack: 20,
-          defense: 10,
-          hp: 50,
-          maxHp: 50,
-          mp: 40,
-          maxMp: 40,
-          rarity: 'common',
-          generation: 1,
-        },
-        {
-          id: 2,
-          name: 'Water Lob',
-          element: ['water', 'fire', 'wood'],
-          gender: 'female',
-          level: 1,
-          exp: 0,
-          maxExp: 100,
-          attack: 18,
-          defense: 12,
-          hp: 55,
-          maxHp: 55,
-          mp: 45,
-          maxMp: 45,
-          rarity: 'common',
-          generation: 1,
-        },
-      ];
-
-      setPets(starterPets);
-      localStorage.setItem(myPetsKey, JSON.stringify(starterPets));
-      localStorage.setItem(generationKey, String(generation1Count + 1));
     }
 
     setMagicPotionCount(readMagicPotionCount(username));
@@ -208,7 +161,7 @@ export default function Dashboard() {
     setMythBalance(readMythBalance(username));
     setDailyClaimed(hasClaimedDailyCheckIn(username));
     setDailyClaimRemainingMs(getDailyCheckInRemainingMs(username));
-  }, [isAuthenticated, t, username]);
+  }, [isAuthenticated, username]);
 
   useEffect(() => {
     if (!isAuthenticated || !username) {

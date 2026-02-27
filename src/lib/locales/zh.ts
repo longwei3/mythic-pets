@@ -332,7 +332,7 @@ export default {
     clickToEngage: '点击3D画面进入游戏模式（按键立即生效）',
     gameModeOn: '游戏模式：已开启（Esc 退出）',
     gameModeOff: '游戏模式：未开启',
-    controls: '控制：WASD 按镜头方向移动，鼠标移动控制视角，左键开火，Shift 冲刺，Space 跳跃，E 采集，Tab 切换目标，V 切换第一/第三人称',
+    controls: '控制：WASD 按镜头方向移动，鼠标移动控制视角，左键开火，Shift 冲刺，Space 跳跃，G 采集，E 用魔法药水，R 用生命药水，Tab 切换目标，V 切换第一/第三人称',
     controlsHint: '进入游戏后会锁定鼠标（和平精英式 TPS 操作）；按 Esc 可退出游戏模式并解锁鼠标。',
     resultWin: '闯关成功',
     resultFail: '闯关失败',
