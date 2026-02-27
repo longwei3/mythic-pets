@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:cn": "STATIC_EXPORT=1 STATIC_BASE_PATH=/mythic-pets next build",
+    "deploy:cn": "bash scripts/deploy-cn-mirror.sh",
     "start": "next start",
     "lint": "eslint",
     "cloud:check": "node scripts/check-cloud-sync.mjs"

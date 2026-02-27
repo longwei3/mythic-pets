@@ -64,3 +64,20 @@ If Supabase key setup fails, the app now has a no-key cloud backup fallback:
 - Logged-in users auto-upload encrypted backup every 60 seconds.
 - Backup also runs when the tab becomes hidden.
 - You can still manually upload/restore from the backup panel.
+
+## CN Mirror Deployment
+
+For China-mainland-friendly access, this repo supports static export to an OSS path mirror.
+
+1. Prepare `${HOME}/.config/longwei-site/deploy.env` with Aliyun credentials and OSS/CDN settings.
+2. Run:
+
+```bash
+npm run deploy:cn
+```
+
+Default mirror entry:
+
+```text
+https://www.longwei.org.cn/mythic-pets/index.html
+```

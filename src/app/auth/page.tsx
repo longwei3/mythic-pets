@@ -78,6 +78,7 @@ function AuthPageContent() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(true);
 
   const nextPath = useMemo(() => {
@@ -95,8 +96,11 @@ function AuthPageContent() {
     return t(`auth.errors.${code}`);
   };
 
-  const onSubmit = (event: FormEvent) => {
+  const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (submitting) {
+      return;
+    }
     setError(null);
 
     if (mode === 'register' && password !== confirmPassword) {
@@ -107,19 +111,24 @@ function AuthPageContent() {
       return;
     }
 
-    const result = mode === 'login' ? login(account, password) : register(account, password);
-    if (!result.ok) {
-      setError(translateAuthError(result.code));
-      if (audioEnabled) {
-        playAuthUiEffect('error');
+    setSubmitting(true);
+    try {
+      const result = mode === 'login' ? await login(account, password) : await register(account, password);
+      if (!result.ok) {
+        setError(translateAuthError(result.code));
+        if (audioEnabled) {
+          playAuthUiEffect('error');
+        }
+        return;
       }
-      return;
-    }
 
-    if (audioEnabled) {
-      playAuthUiEffect('success');
+      if (audioEnabled) {
+        playAuthUiEffect('success');
+      }
+      router.replace(nextPath);
+    } finally {
+      setSubmitting(false);
     }
-    router.replace(nextPath);
   };
 
   useEffect(() => {
@@ -292,14 +301,15 @@ function AuthPageContent() {
 
               <button
                 type="submit"
+                disabled={submitting}
                 onMouseEnter={() => {
                   if (audioEnabled) {
                     playAuthUiEffect('switch');
                   }
                 }}
-                className="w-full px-4 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-semibold"
+                className="w-full px-4 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {mode === 'login' ? t('auth.loginButton') : t('auth.registerButton')}
+                {submitting ? '...' : mode === 'login' ? t('auth.loginButton') : t('auth.registerButton')}
               </button>
             </form>
           )}

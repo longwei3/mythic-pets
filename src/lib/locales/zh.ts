@@ -64,9 +64,9 @@ export default {
 
   landing: {
     title: '萌虾牧场',
-    subtitle: '收集、对战与繁殖小萌龙',
+    subtitle: '收集、对战与繁殖小萌虾',
     description:
-      '你的冒险从这里开始。收集萌萌的小龙龙，与对手战斗，在 Base 链上繁殖独特的 NFT 龙龙。',
+      '你的冒险从这里开始。收集萌萌的小龙虾，与对手战斗，在互联网上繁殖独特的 NFT 龙虾。',
     connectWallet: '账号登录',
     getStarted: '开始游戏',
     showcaseTitle: '龙虾属性一览',
@@ -80,16 +80,16 @@ export default {
     musicHint: '首页支持电子钢琴背景音乐与特效音（首次点击页面可解锁音频）。',
     features: {
       collect: {
-        title: '收集小龙龙',
-        description: '免费领取小龙龙，开始你的收集之旅',
+        title: '收集小龙虾',
+        description: '免费领取小龙虾，开始你的收集之旅',
       },
       battle: {
         title: '战斗',
-        description: '与 AI 对战，提升小龙龙等级',
+        description: '与 AI 对战，提升小龙虾等级',
       },
       breed: {
         title: '繁殖',
-        description: '通过繁殖创造独特 NFT 龙龙',
+        description: '通过繁殖创造独特 NFT 龙虾',
       },
     },
     stats: {
@@ -194,7 +194,7 @@ export default {
     reconnect: '请先登录账号',
     battleLog: '战斗记录',
     arena: '战斗竞技场',
-    playerDefaultName: '小红龙',
+    playerDefaultName: '小红虾',
     enemies: {
       clownfish: '小丑鱼',
       octopus: '章鱼哥',

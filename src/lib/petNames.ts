@@ -7,7 +7,7 @@ const STARTER_NAME_MAP: Record<string, string> = {
   '水灵龙虾': 'dashboard.starterPets.water',
 };
 
-const BABY_NAME_PATTERNS = [/^LobBaby(\d+)$/i, /^龙宝宝(\d+)$/, /^小龙龙(\d+)$/];
+const BABY_NAME_PATTERNS = [/^LobBaby(\d+)$/i, /^龙宝宝(\d+)$/, /^小龙龙(\d+)$/, /^小龙虾(\d+)$/];
 
 export function localizePetName(rawName: string | undefined, t: TFunction): string {
   if (!rawName) {
@@ -28,4 +28,3 @@ export function localizePetName(rawName: string | undefined, t: TFunction): stri
 
   return rawName;
 }
-

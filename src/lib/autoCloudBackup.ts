@@ -42,6 +42,14 @@ function onVisibilityChange(): void {
   }
 }
 
+function onPageHide(): void {
+  void runAutoBackup();
+}
+
+function onBeforeUnload(): void {
+  void runAutoBackup();
+}
+
 export function startAutoCloudBackup(): void {
   if (!hasWindow() || backupIntervalId) {
     return;
@@ -53,6 +61,8 @@ export function startAutoCloudBackup(): void {
   }, AUTO_BACKUP_INTERVAL_MS);
 
   document.addEventListener('visibilitychange', onVisibilityChange);
+  window.addEventListener('pagehide', onPageHide);
+  window.addEventListener('beforeunload', onBeforeUnload);
 }
 
 export function stopAutoCloudBackup(): void {
@@ -65,6 +75,8 @@ export function stopAutoCloudBackup(): void {
     backupIntervalId = null;
   }
   document.removeEventListener('visibilitychange', onVisibilityChange);
+  window.removeEventListener('pagehide', onPageHide);
+  window.removeEventListener('beforeunload', onBeforeUnload);
 }
 
 export function triggerAutoCloudBackup(): void {

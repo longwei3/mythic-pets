@@ -276,6 +276,7 @@ export async function uploadBackupToCloud(): Promise<CloudBackupResult> {
         headers: {
           'Content-Type': 'application/json',
         },
+        keepalive: true,
         body: payload,
       });
 
@@ -292,6 +293,7 @@ export async function uploadBackupToCloud(): Promise<CloudBackupResult> {
       headers: {
         'Content-Type': 'application/json',
       },
+      keepalive: true,
       body: payload,
     });
 
