@@ -1270,6 +1270,12 @@ export default function AdventureScene({
 }: AdventureSceneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [cameraAngles, setCameraAngles] = useState({ yaw: 0.78, pitch: 0.42 });
+  const pointerLockSupported = useMemo(() => {
+    if (typeof document === 'undefined') {
+      return false;
+    }
+    return typeof document.exitPointerLock === 'function';
+  }, []);
 
   const bossSignal = useMemo(
     () => enemies.find((enemy) => enemy.kind === 'boss' && enemy.activeBossSkill && enemy.telegraphMsLeft > 0) ?? null,
@@ -1302,10 +1308,10 @@ export default function AdventureScene({
     if (!container) {
       return;
     }
-    if (!gameMode && document.pointerLockElement === container) {
+    if (pointerLockSupported && !gameMode && document.pointerLockElement === container) {
       document.exitPointerLock();
     }
-  }, [gameMode]);
+  }, [gameMode, pointerLockSupported]);
 
   const onPointerDown: React.PointerEventHandler<HTMLDivElement> = (event) => {
     if (event.button !== 0) {
@@ -1314,7 +1320,7 @@ export default function AdventureScene({
     const container = containerRef.current;
     if (!gameMode) {
       onEngageGameMode();
-      if (container && document.pointerLockElement !== container) {
+      if (pointerLockSupported && container && document.pointerLockElement !== container && typeof container.requestPointerLock === 'function') {
         container.requestPointerLock();
       }
       return;
@@ -1323,7 +1329,7 @@ export default function AdventureScene({
     if (!container) {
       return;
     }
-    if (document.pointerLockElement !== container) {
+    if (pointerLockSupported && document.pointerLockElement !== container && typeof container.requestPointerLock === 'function') {
       container.requestPointerLock();
       return;
     }
