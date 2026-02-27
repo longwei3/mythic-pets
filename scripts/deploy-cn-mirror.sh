@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${HOME}/.config/longwei-site/deploy.env"
 PROFILE="${ALIYUN_PROFILE:-cnoss}"
 MIRROR_PREFIX="${MIRROR_PREFIX:-mythic-pets}"
+MIRROR_SYNC_DELETE="${MIRROR_SYNC_DELETE:-0}"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "[deploy-cn] Missing env file: $ENV_FILE" >&2
@@ -37,7 +38,11 @@ aliyun configure set \
   --access-key-secret "$ALIYUN_ACCESS_KEY_SECRET" >/dev/null
 
 echo "[deploy-cn] Syncing out/ -> oss://${OSS_BUCKET}/${MIRROR_PREFIX}/"
-aliyun --profile "$PROFILE" ossutil sync out/ "oss://${OSS_BUCKET}/${MIRROR_PREFIX}/" --delete --force --no-progress
+if [[ "$MIRROR_SYNC_DELETE" == "1" ]]; then
+  aliyun --profile "$PROFILE" ossutil sync out/ "oss://${OSS_BUCKET}/${MIRROR_PREFIX}/" --delete --force --no-progress
+else
+  aliyun --profile "$PROFILE" ossutil sync out/ "oss://${OSS_BUCKET}/${MIRROR_PREFIX}/" --force --no-progress
+fi
 
 if [[ -n "${PRIMARY_DOMAIN}" ]]; then
   echo "[deploy-cn] Trying CDN refresh for ${PRIMARY_DOMAIN}/${MIRROR_PREFIX}/"
