@@ -6,6 +6,9 @@ const normalizedBasePath =
   staticBasePath && staticBasePath !== '/' ? (staticBasePath.startsWith('/') ? staticBasePath : `/${staticBasePath}`) : '';
 
 const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_BASE_PATH: normalizedBasePath,
+  },
   ...(isStaticExport
     ? {
         output: 'export',

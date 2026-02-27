@@ -40,10 +40,10 @@ interface AdventureSceneProps {
 }
 
 const SEA_MODEL_PATHS = {
-  scout: '/models/adventure3d/barramundi-fish.glb',
-  hunter: '/models/adventure3d/reef-duck.glb',
-  crusher: '/models/adventure3d/reef-fox.glb',
-  boss: '/models/adventure3d/sea-dragon.glb',
+  scout: `${process.env.NEXT_PUBLIC_BASE_PATH || ''}/models/adventure3d/barramundi-fish.glb`,
+  hunter: `${process.env.NEXT_PUBLIC_BASE_PATH || ''}/models/adventure3d/reef-duck.glb`,
+  crusher: `${process.env.NEXT_PUBLIC_BASE_PATH || ''}/models/adventure3d/reef-fox.glb`,
+  boss: `${process.env.NEXT_PUBLIC_BASE_PATH || ''}/models/adventure3d/sea-dragon.glb`,
 } as const;
 
 const NPC_MODEL_TARGET_SIZE = 1.34;
