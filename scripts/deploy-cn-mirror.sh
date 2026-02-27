@@ -44,6 +44,28 @@ else
   aliyun --profile "$PROFILE" ossutil sync out/ "oss://${OSS_BUCKET}/${MIRROR_PREFIX}/" --force --no-progress
 fi
 
+echo "[deploy-cn] Creating extensionless route aliases for OSS direct path access"
+while IFS= read -r index_file; do
+  route="${index_file#out/}"
+  route="${route%/index.html}"
+
+  if [[ -z "$route" ]]; then
+    continue
+  fi
+
+  case "$route" in
+    _next*|favicon.ico*|robots.txt*|sitemap.xml*)
+      continue
+      ;;
+  esac
+
+  src_path="$index_file"
+  dst_path="oss://${OSS_BUCKET}/${MIRROR_PREFIX}/${route}"
+  aliyun --profile "$PROFILE" ossutil cp "$src_path" "$dst_path" \
+    --content-type text/html \
+    --force --no-progress >/dev/null
+done < <(find out -type f -name 'index.html' | sort)
+
 if [[ -n "${PRIMARY_DOMAIN}" ]]; then
   echo "[deploy-cn] Trying CDN refresh for ${PRIMARY_DOMAIN}/${MIRROR_PREFIX}/"
   aliyun --profile "$PROFILE" cdn RefreshObjectCaches \
