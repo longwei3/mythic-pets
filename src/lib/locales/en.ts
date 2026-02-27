@@ -49,6 +49,7 @@ export default {
       'user-limit': 'Account capacity reached (maximum 10,000 players).',
       'user-not-found': 'Account not found. Please register first.',
       'wrong-password': 'Wrong password. Please try again.',
+      'cloud-unavailable': 'Cloud sign-in service is unavailable (configuration or network issue). Please sign in on your original device and sync first, or ask admin to fix cloud keys.',
     },
   },
 

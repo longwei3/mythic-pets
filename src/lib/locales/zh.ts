@@ -49,6 +49,7 @@ export default {
       'user-limit': '账号名额已满（最多 10000 个玩家）。',
       'user-not-found': '未找到该账号，请先注册。',
       'wrong-password': '密码错误，请重试。',
+      'cloud-unavailable': '云端登录服务不可用（配置或网络异常），请先在原设备登录并等待同步，或联系管理员修复云端密钥。',
     },
   },
 

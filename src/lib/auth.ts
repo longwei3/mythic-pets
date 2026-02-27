@@ -27,7 +27,8 @@ export type AuthActionCode =
   | 'user-exists'
   | 'user-limit'
   | 'user-not-found'
-  | 'wrong-password';
+  | 'wrong-password'
+  | 'cloud-unavailable';
 
 export interface AuthActionResult {
   ok: boolean;
@@ -399,7 +400,7 @@ export async function loginWithCloudCheck(username: string, password: string): P
     return { ok: false, code: 'invalid-password' };
   }
   if (!isSupabaseConfigured || !supabase) {
-    return { ok: false, code: 'user-not-found' };
+    return { ok: false, code: 'cloud-unavailable' };
   }
 
   try {
@@ -412,7 +413,7 @@ export async function loginWithCloudCheck(username: string, password: string): P
 
     if (error) {
       console.warn('Cloud auth query failed:', error.message);
-      return { ok: false, code: 'user-not-found' };
+      return { ok: false, code: 'cloud-unavailable' };
     }
 
     const record = parseCloudAuthRecord(data?.value, normalized);
@@ -443,7 +444,7 @@ export async function loginWithCloudCheck(username: string, password: string): P
     return { ok: true, username: normalized };
   } catch (error) {
     console.warn('Cloud auth check failed:', error);
-    return { ok: false, code: 'user-not-found' };
+    return { ok: false, code: 'cloud-unavailable' };
   }
 }
 
