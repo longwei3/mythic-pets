@@ -8,6 +8,8 @@ export const AUTH_SESSION_KEY = 'mythicpets-auth-session';
 export const MAX_PLAYER_ID = 10000;
 const ENCRYPTION_KEY_PREFIX = 'mythic-pets-secure-v1';
 const AUTH_CLOUD_KEY = 'auth-user-v1';
+const AUTH_PLAYER_ID_COUNTER_USER = '__system__';
+const AUTH_PLAYER_ID_COUNTER_KEY = 'auth-player-id-counter-v1';
 
 export interface AuthUser {
   username: string;
@@ -40,6 +42,7 @@ interface CloudAuthRecord {
   username: string;
   passwordHash: string;
   createdAt: number;
+  playerId?: number;
   updatedAt: number;
 }
 
@@ -94,11 +97,13 @@ function parseCloudAuthRecord(value: unknown, usernameHint: string): CloudAuthRe
   const updatedAt = typeof updatedAtRaw === 'number' && Number.isFinite(updatedAtRaw)
     ? updatedAtRaw
     : Date.now();
+  const playerId = isValidPlayerId(parsed.playerId) ? parsed.playerId : undefined;
 
   return {
     username,
     passwordHash: parsed.passwordHash,
     createdAt,
+    playerId,
     updatedAt,
   };
 }
@@ -108,6 +113,27 @@ function compareByCreatedAtAndUsername(a: Pick<AuthUser, 'createdAt' | 'username
     return a.createdAt - b.createdAt;
   }
   return a.username.localeCompare(b.username);
+}
+
+function isValidPlayerId(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= MAX_PLAYER_ID;
+}
+
+function getNextAvailablePlayerId(users: Array<Pick<AuthUser, 'playerId'>>): number | null {
+  const used = new Set<number>();
+  users.forEach((user) => {
+    if (isValidPlayerId(user.playerId)) {
+      used.add(user.playerId);
+    }
+  });
+
+  for (let id = 1; id <= MAX_PLAYER_ID; id += 1) {
+    if (!used.has(id)) {
+      return id;
+    }
+  }
+
+  return null;
 }
 
 function normalizeAndAssignPlayerIds(users: Omit<AuthUser, 'playerId'>[] | AuthUser[]): AuthUser[] {
@@ -127,12 +153,36 @@ function normalizeAndAssignPlayerIds(users: Omit<AuthUser, 'playerId'>[] | AuthU
     });
   }
 
-  return deduped.map((user, index) => ({
-    username: user.username,
-    passwordHash: user.passwordHash,
-    createdAt: user.createdAt,
-    playerId: index + 1,
-  }));
+  const usedIds = new Set<number>();
+  deduped.forEach((user) => {
+    if (isValidPlayerId((user as Partial<AuthUser>).playerId)) {
+      usedIds.add((user as AuthUser).playerId);
+    }
+  });
+
+  let nextCandidate = 1;
+
+  return deduped.map((user) => {
+    let playerId = isValidPlayerId((user as Partial<AuthUser>).playerId)
+      ? (user as AuthUser).playerId
+      : null;
+
+    if (!playerId) {
+      while (usedIds.has(nextCandidate) && nextCandidate <= MAX_PLAYER_ID) {
+        nextCandidate += 1;
+      }
+      playerId = nextCandidate <= MAX_PLAYER_ID ? nextCandidate : MAX_PLAYER_ID;
+      usedIds.add(playerId);
+      nextCandidate += 1;
+    }
+
+    return {
+      username: user.username,
+      passwordHash: user.passwordHash,
+      createdAt: user.createdAt,
+      playerId,
+    };
+  });
 }
 
 function normalizeAuthUserRecord(raw: unknown): Omit<AuthUser, 'playerId'> | AuthUser | null {
@@ -158,7 +208,7 @@ function normalizeAuthUserRecord(raw: unknown): Omit<AuthUser, 'playerId'> | Aut
     return null;
   }
 
-  if (typeof item.playerId === 'number' && Number.isFinite(item.playerId)) {
+  if (isValidPlayerId(item.playerId)) {
     return {
       username: item.username,
       passwordHash: item.passwordHash,
@@ -288,11 +338,11 @@ function validateUsername(raw: string): boolean {
   if (normalized === 'guest') {
     return false;
   }
-  return /^[a-zA-Z0-9_]{3,20}$/.test(normalized);
+  return /^[a-zA-Z0-9_]{3,11}$/.test(normalized);
 }
 
 function validatePassword(raw: string): boolean {
-  return raw.length >= 6 && raw.length <= 64;
+  return raw.length >= 3 && raw.length <= 11;
 }
 
 function writeSession(username: string): void {
@@ -324,6 +374,134 @@ function migrateLegacyDataIfNeeded(username: string): void {
       localStorage.setItem(targetKey, legacyValue);
     }
   });
+}
+
+function parseCloudPlayerCounter(value: unknown): number {
+  if (!value || typeof value !== 'object') {
+    return 0;
+  }
+  const parsed = value as Record<string, unknown>;
+  const candidate = [parsed.lastAssigned, parsed.current, parsed.next]
+    .find((item) => typeof item === 'number' && Number.isFinite(item)) as number | undefined;
+  if (!candidate) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(candidate));
+}
+
+function parseCloudPlayerId(value: unknown): number | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const parsed = value as Record<string, unknown>;
+  return isValidPlayerId(parsed.playerId) ? parsed.playerId : null;
+}
+
+async function reserveNextCloudPlayerId(): Promise<number | null> {
+  if (!isSupabaseConfigured || !supabase) {
+    return null;
+  }
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const { data: counterRow, error: counterError } = await supabase
+      .from('game_state')
+      .select('value,updated_at')
+      .eq('user_id', AUTH_PLAYER_ID_COUNTER_USER)
+      .eq('key', AUTH_PLAYER_ID_COUNTER_KEY)
+      .maybeSingle();
+
+    if (counterError) {
+      console.warn('Cloud player id counter read failed:', counterError.message);
+      return null;
+    }
+
+    let lastAssigned = parseCloudPlayerCounter(counterRow?.value);
+    if (!counterRow) {
+      const { data: authRows, error: authRowsError } = await supabase
+        .from('game_state')
+        .select('value')
+        .eq('key', AUTH_CLOUD_KEY);
+      if (!authRowsError && authRows) {
+        authRows.forEach((row) => {
+          const cloudPlayerId = parseCloudPlayerId(row.value);
+          if (cloudPlayerId) {
+            lastAssigned = Math.max(lastAssigned, cloudPlayerId);
+          }
+        });
+      }
+    }
+
+    const nextId = lastAssigned + 1;
+    if (nextId > MAX_PLAYER_ID) {
+      return null;
+    }
+
+    const nowIso = new Date().toISOString();
+    const counterValue = { lastAssigned: nextId, updatedAt: Date.now() };
+
+    if (counterRow) {
+      const { data: updatedRows, error: updateError } = await supabase
+        .from('game_state')
+        .update({
+          value: counterValue,
+          updated_at: nowIso,
+        })
+        .eq('user_id', AUTH_PLAYER_ID_COUNTER_USER)
+        .eq('key', AUTH_PLAYER_ID_COUNTER_KEY)
+        .eq('updated_at', counterRow.updated_at)
+        .select('id');
+
+      if (updateError) {
+        continue;
+      }
+
+      if (!updatedRows || updatedRows.length === 0) {
+        continue;
+      }
+
+      return nextId;
+    }
+
+    const { error: insertError } = await supabase.from('game_state').insert({
+      user_id: AUTH_PLAYER_ID_COUNTER_USER,
+      key: AUTH_PLAYER_ID_COUNTER_KEY,
+      value: counterValue,
+      updated_at: nowIso,
+    });
+
+    if (insertError) {
+      continue;
+    }
+
+    return nextId;
+  }
+
+  return null;
+}
+
+function syncLocalPlayerId(username: string, playerId: number, passwordHash?: string, createdAt?: number): void {
+  if (!isValidPlayerId(playerId)) {
+    return;
+  }
+
+  const normalized = normalizeUsername(username);
+  const users = readAuthUsers(normalized);
+  const existing = users.find((user) => user.username === normalized);
+  const password = existing?.passwordHash ?? passwordHash;
+  if (!password) {
+    return;
+  }
+
+  const merged = normalizeAndAssignPlayerIds([
+    ...users.filter((user) => user.username !== normalized),
+    {
+      username: normalized,
+      passwordHash: password,
+      createdAt: existing?.createdAt ?? createdAt ?? Date.now(),
+      playerId,
+    },
+  ]);
+  writeAuthUsers(merged);
 }
 
 export function readAuthSession(): AuthSession | null {
@@ -428,16 +606,40 @@ export async function loginWithCloudCheck(username: string, password: string): P
 
     const users = readAuthUsers(normalized);
     const existing = users.find((user) => user.username === normalized);
+    const fallbackLocalPlayerId = existing?.playerId ?? getNextAvailablePlayerId(users) ?? 1;
+    const reservedPlayerId = record.playerId ?? (await reserveNextCloudPlayerId()) ?? fallbackLocalPlayerId;
+    const finalPlayerId = isValidPlayerId(reservedPlayerId) ? reservedPlayerId : fallbackLocalPlayerId;
+
     const merged = normalizeAndAssignPlayerIds([
       ...users.filter((user) => user.username !== normalized),
       {
         username: normalized,
         passwordHash: record.passwordHash,
         createdAt: existing ? Math.min(existing.createdAt, record.createdAt) : record.createdAt,
-        playerId: existing?.playerId ?? users.length + 1,
+        playerId: finalPlayerId,
       },
     ]);
     writeAuthUsers(merged);
+
+    if (!record.playerId || record.playerId !== finalPlayerId) {
+      const now = Date.now();
+      const payload: CloudAuthRecord = {
+        username: normalized,
+        passwordHash: record.passwordHash,
+        createdAt: record.createdAt,
+        playerId: finalPlayerId,
+        updatedAt: now,
+      };
+      await supabase.from('game_state').upsert(
+        {
+          user_id: normalized,
+          key: AUTH_CLOUD_KEY,
+          value: payload,
+          updated_at: new Date(now).toISOString(),
+        },
+        { onConflict: 'user_id,key' },
+      );
+    }
 
     writeSession(normalized);
     migrateLegacyDataIfNeeded(normalized);
@@ -461,7 +663,8 @@ export function registerWithPassword(username: string, password: string): AuthAc
   if (users.some((user) => user.username === normalized)) {
     return { ok: false, code: 'user-exists' };
   }
-  if (users.length >= MAX_PLAYER_ID) {
+  const nextPlayerId = getNextAvailablePlayerId(users);
+  if (!nextPlayerId) {
     return { ok: false, code: 'user-limit' };
   }
 
@@ -471,7 +674,7 @@ export function registerWithPassword(username: string, password: string): AuthAc
       username: normalized,
       passwordHash: hashPassword(normalized, password),
       createdAt,
-      playerId: users.length + 1,
+      playerId: nextPlayerId,
     },
     ...users,
   ]);
@@ -496,10 +699,36 @@ export async function syncAuthUserToCloud(username: string): Promise<void> {
     return;
   }
 
+  const { data: cloudAuthData, error: cloudAuthError } = await supabase
+    .from('game_state')
+    .select('value')
+    .eq('user_id', normalized)
+    .eq('key', AUTH_CLOUD_KEY)
+    .maybeSingle();
+
+  if (cloudAuthError) {
+    console.warn('Cloud auth read before sync failed:', cloudAuthError.message);
+    return;
+  }
+
+  const cloudAuth = parseCloudAuthRecord(cloudAuthData?.value, normalized);
+  const reservedPlayerId = cloudAuth?.playerId ?? (await reserveNextCloudPlayerId());
+  const finalPlayerId = isValidPlayerId(reservedPlayerId)
+    ? reservedPlayerId
+    : (isValidPlayerId(found.playerId) ? found.playerId : null);
+
+  if (!finalPlayerId) {
+    console.warn('Cloud player id allocation failed for:', normalized);
+    return;
+  }
+
+  syncLocalPlayerId(normalized, finalPlayerId, found.passwordHash, found.createdAt);
+
   const payload: CloudAuthRecord = {
     username: normalized,
     passwordHash: found.passwordHash,
     createdAt: found.createdAt,
+    playerId: finalPlayerId,
     updatedAt: Date.now(),
   };
 
