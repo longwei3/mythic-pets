@@ -101,6 +101,11 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function pseudoNoise(index: number, seed: number): number {
+  const raw = Math.sin(index * 12.9898 + seed * 78.233) * 43758.5453;
+  return raw - Math.floor(raw);
+}
+
 function attackPulseDurationByKind(kind: EnemyState['kind']): number {
   if (kind === 'boss') {
     return 620;
@@ -196,6 +201,7 @@ function CameraRig({
 }
 
 function SeaParticles({ count }: { count: number }) {
+  const groupRef = useRef<Group>(null);
   const span = ADVENTURE_MAP_BOUNDARY * 1.9;
   const half = span / 2;
   const particles = useMemo(() => {
@@ -204,15 +210,25 @@ function SeaParticles({ count }: { count: number }) {
       y: 0.5 + ((i * 7) % 18) * 0.22,
       z: ((i * 19) % span) - half,
       s: 0.03 + ((i * 11) % 4) * 0.02,
+      p: i * 0.37,
     }));
   }, [count, half, span]);
 
+  useFrame(({ clock }) => {
+    if (!groupRef.current) {
+      return;
+    }
+    const t = clock.elapsedTime;
+    groupRef.current.rotation.y = t * 0.04;
+    groupRef.current.position.y = Math.sin(t * 0.42) * 0.08;
+  });
+
   return (
-    <group>
+    <group ref={groupRef}>
       {particles.map((p, index) => (
-        <mesh key={`particle-${index}`} position={[p.x, p.y, p.z]}>
+        <mesh key={`particle-${index}`} position={[p.x, p.y + Math.sin(p.p) * 0.14, p.z]}>
           <sphereGeometry args={[p.s, 6, 6]} />
-          <meshStandardMaterial color="#7dd3fc" emissive="#0ea5e9" emissiveIntensity={0.35} transparent opacity={0.52} />
+          <meshStandardMaterial color="#93c5fd" emissive="#22d3ee" emissiveIntensity={0.4} transparent opacity={0.48} />
         </mesh>
       ))}
     </group>
@@ -290,12 +306,128 @@ function ZoneRings({ activeZone }: { activeZone: number }) {
   );
 }
 
+function SeafloorDecor({ quality }: { quality: QualityMode }) {
+  const count = quality === 'high' ? 92 : 46;
+  const grassCount = quality === 'high' ? 64 : 28;
+  const causticBands = quality === 'high' ? 4 : 2;
+
+  const rocks = useMemo(() => {
+    return Array.from({ length: count }, (_, index) => {
+      const angle = pseudoNoise(index, 0.32) * Math.PI * 2;
+      const radius = Math.sqrt(pseudoNoise(index, 0.66)) * ADVENTURE_MAP_BOUNDARY * 0.9;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      const scale = 0.12 + pseudoNoise(index, 0.91) * 0.34;
+      const height = 0.08 + pseudoNoise(index, 1.2) * 0.3;
+      const rotY = pseudoNoise(index, 1.73) * Math.PI;
+      const tint = pseudoNoise(index, 2.11);
+      return { x, z, scale, height, rotY, tint };
+    });
+  }, [count]);
+
+  const seaweed = useMemo(() => {
+    return Array.from({ length: grassCount }, (_, index) => {
+      const angle = pseudoNoise(index, 2.94) * Math.PI * 2;
+      const radius = Math.sqrt(pseudoNoise(index, 3.12)) * ADVENTURE_MAP_BOUNDARY * 0.84;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      const height = 0.48 + pseudoNoise(index, 3.66) * 0.66;
+      const sway = 0.08 + pseudoNoise(index, 4.22) * 0.18;
+      const rotY = pseudoNoise(index, 5.01) * Math.PI * 2;
+      return { x, z, height, sway, rotY, phase: index * 0.37 };
+    });
+  }, [grassCount]);
+
+  const causticRefs = useRef<Array<Group | null>>([]);
+
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    causticRefs.current.forEach((ref, index) => {
+      if (!ref) {
+        return;
+      }
+      const dir = index % 2 === 0 ? 1 : -1;
+      ref.rotation.y = dir * t * (0.05 + index * 0.012);
+      ref.position.y = 0.035 + Math.sin(t * (0.7 + index * 0.15)) * 0.015;
+    });
+  });
+
+  return (
+    <group>
+      {rocks.map((rock, index) => (
+        <mesh
+          key={`floor-rock-${index}`}
+          castShadow
+          receiveShadow
+          position={[rock.x, rock.height * 0.5, rock.z]}
+          rotation={[0, rock.rotY, 0]}
+          scale={[rock.scale, rock.height, rock.scale]}
+        >
+          <dodecahedronGeometry args={[1, 0]} />
+          <meshStandardMaterial
+            color={rock.tint > 0.55 ? '#0f766e' : '#115e59'}
+            emissive={rock.tint > 0.75 ? '#155e75' : '#0f3f46'}
+            emissiveIntensity={0.09}
+            roughness={0.86}
+            metalness={0.05}
+          />
+        </mesh>
+      ))}
+
+      {seaweed.map((grass, index) => (
+        <group
+          key={`floor-seaweed-${index}`}
+          position={[grass.x, grass.height * 0.5, grass.z]}
+          rotation={[Math.sin(grass.phase) * grass.sway, grass.rotY, 0]}
+        >
+          <mesh castShadow>
+            <cylinderGeometry args={[0.03, 0.05, grass.height, 7]} />
+            <meshStandardMaterial color="#22c55e" emissive="#0f766e" emissiveIntensity={0.12} roughness={0.5} />
+          </mesh>
+          <mesh position={[0, grass.height * 0.38, 0.04]} castShadow>
+            <sphereGeometry args={[0.07, 8, 8]} />
+            <meshStandardMaterial color="#4ade80" emissive="#14532d" emissiveIntensity={0.18} roughness={0.44} />
+          </mesh>
+        </group>
+      ))}
+
+      {Array.from({ length: causticBands }, (_, index) => {
+        const inner = ADVENTURE_MAP_BOUNDARY * (0.22 + index * 0.14);
+        const outer = inner + ADVENTURE_MAP_BOUNDARY * 0.1;
+        return (
+          <group
+            key={`caustic-band-${index}`}
+            ref={(node) => {
+              causticRefs.current[index] = node;
+            }}
+          >
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.035, 0]}>
+              <ringGeometry args={[inner, outer, 96]} />
+              <meshBasicMaterial color="#67e8f9" transparent opacity={0.08} />
+            </mesh>
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
 function LobsterClaw({ side }: { side: -1 | 1 }) {
   const sideRotation = side * 0.24;
   const sideOffset = side * 1.02;
+  const clawRef = useRef<Group>(null);
+
+  useFrame(({ clock }) => {
+    if (!clawRef.current) {
+      return;
+    }
+    const t = clock.elapsedTime * 4.6 + (side === 1 ? 0.4 : 0);
+    clawRef.current.rotation.x = Math.sin(t) * 0.08;
+    clawRef.current.rotation.z = side * (0.12 + Math.sin(t * 0.7) * 0.1);
+  });
 
   return (
-    <group position={[sideOffset, 0.08, 0.22]} rotation={[0, sideRotation, side * 0.12]}>
+    <group ref={clawRef} position={[sideOffset, 0.08, 0.22]} rotation={[0, sideRotation, side * 0.12]}>
       <mesh position={[side * 0.28, 0.02, 0.08]} rotation={[0, 0, side * 0.34]} castShadow>
         <cylinderGeometry args={[0.08, 0.07, 0.56, 10]} />
         <meshStandardMaterial color="#ef4444" roughness={0.42} />
@@ -319,8 +451,40 @@ function LobsterClaw({ side }: { side: -1 | 1 }) {
   );
 }
 
+function LobsterLeg({ side, index }: { side: -1 | 1; index: number }) {
+  const legRef = useRef<Group>(null);
+  const z = 0.06 - index * 0.34;
+  const x = side * (0.4 + index * 0.14);
+  const y = 0.04 - index * 0.01;
+
+  useFrame(({ clock }) => {
+    if (!legRef.current) {
+      return;
+    }
+    const t = clock.elapsedTime * 5.5 + index * 0.92 + (side === 1 ? 0.55 : 0);
+    legRef.current.rotation.x = Math.sin(t) * 0.22;
+    legRef.current.rotation.y = side * (0.22 + index * 0.05);
+    legRef.current.rotation.z = side * (0.78 + Math.sin(t + 0.4) * 0.16);
+    legRef.current.position.y = y + Math.sin(t) * 0.012;
+  });
+
+  return (
+    <group ref={legRef} position={[x, y, z]}>
+      <mesh castShadow position={[side * 0.16, 0, 0.05]}>
+        <capsuleGeometry args={[0.03, 0.34, 4, 8]} />
+        <meshStandardMaterial color="#f87171" roughness={0.44} />
+      </mesh>
+      <mesh castShadow position={[side * 0.28, -0.08, 0.12]} rotation={[0, 0, side * 0.2]}>
+        <capsuleGeometry args={[0.025, 0.24, 4, 8]} />
+        <meshStandardMaterial color="#fb7185" roughness={0.46} />
+      </mesh>
+    </group>
+  );
+}
+
 function PlayerAvatar({ player }: { player: PlayerState }) {
   const avatarRef = useRef<Group>(null);
+  const tailRef = useRef<Group>(null);
 
   useFrame(({ clock }) => {
     if (!avatarRef.current) {
@@ -328,7 +492,10 @@ function PlayerAvatar({ player }: { player: PlayerState }) {
     }
     const t = clock.elapsedTime;
     avatarRef.current.position.y = 0.68 + player.elevation + Math.sin(t * 3.1) * 0.03;
-    avatarRef.current.rotation.y = player.heading + Math.sin(t * 1.2) * 0.08;
+    avatarRef.current.rotation.y = player.heading + Math.sin(t * 1.3) * 0.08;
+    if (tailRef.current) {
+      tailRef.current.rotation.x = Math.sin(t * 4.8) * 0.2;
+    }
   });
 
   return (
@@ -343,6 +510,13 @@ function PlayerAvatar({ player }: { player: PlayerState }) {
         <meshStandardMaterial color="#f43f5e" roughness={0.4} />
       </mesh>
 
+      {[0, 1, 2].map((line) => (
+        <mesh key={`ridge-${line}`} castShadow position={[0, 0.28 + line * 0.06, -0.18 - line * 0.16]} rotation={[0.12, 0, 0]}>
+          <cylinderGeometry args={[0.03, 0.03, 0.56 - line * 0.08, 8]} />
+          <meshStandardMaterial color="#fb7185" roughness={0.36} />
+        </mesh>
+      ))}
+
       <mesh castShadow position={[0, 0.14, -0.42]}>
         <sphereGeometry args={[0.44, 18, 18]} />
         <meshStandardMaterial color="#f43f5e" roughness={0.42} />
@@ -353,23 +527,31 @@ function PlayerAvatar({ player }: { player: PlayerState }) {
         <meshStandardMaterial color="#e11d48" roughness={0.45} />
       </mesh>
 
-      <mesh castShadow position={[0, 0.11, -0.9]} rotation={[0, 0, 0]}>
-        <coneGeometry args={[0.31, 0.44, 3]} />
-        <meshStandardMaterial color="#fb7185" roughness={0.42} />
-      </mesh>
+      <group ref={tailRef} position={[0, 0.11, -0.92]}>
+        <mesh castShadow rotation={[0, 0, 0]}>
+          <coneGeometry args={[0.31, 0.44, 3]} />
+          <meshStandardMaterial color="#fb7185" roughness={0.42} />
+        </mesh>
 
-      <mesh castShadow position={[-0.24, 0.12, -0.94]} rotation={[0, 0.25, 0.1]}>
-        <coneGeometry args={[0.22, 0.36, 3]} />
-        <meshStandardMaterial color="#fb7185" roughness={0.42} />
-      </mesh>
+        <mesh castShadow position={[-0.24, 0.01, -0.04]} rotation={[0, 0.25, 0.1]}>
+          <coneGeometry args={[0.22, 0.36, 3]} />
+          <meshStandardMaterial color="#fb7185" roughness={0.42} />
+        </mesh>
 
-      <mesh castShadow position={[0.24, 0.12, -0.94]} rotation={[0, -0.25, -0.1]}>
-        <coneGeometry args={[0.22, 0.36, 3]} />
-        <meshStandardMaterial color="#fb7185" roughness={0.42} />
-      </mesh>
+        <mesh castShadow position={[0.24, 0.01, -0.04]} rotation={[0, -0.25, -0.1]}>
+          <coneGeometry args={[0.22, 0.36, 3]} />
+          <meshStandardMaterial color="#fb7185" roughness={0.42} />
+        </mesh>
+      </group>
 
       <LobsterClaw side={-1} />
       <LobsterClaw side={1} />
+      {[0, 1, 2, 3].map((index) => (
+        <LobsterLeg key={`leg-left-${index}`} side={-1} index={index} />
+      ))}
+      {[0, 1, 2, 3].map((index) => (
+        <LobsterLeg key={`leg-right-${index}`} side={1} index={index} />
+      ))}
 
       <mesh position={[-0.19, 0.66, 0.62]} rotation={[0.1, 0.06, -0.06]} castShadow>
         <cylinderGeometry args={[0.03, 0.03, 0.36, 8]} />
@@ -1152,31 +1334,39 @@ export default function AdventureScene({
   return (
     <div
       ref={containerRef}
-      className="relative h-[66vh] min-h-[460px] w-full rounded-2xl overflow-hidden border border-cyan-500/30 bg-slate-900/30 select-none"
+      className="relative h-[56vh] min-h-[330px] w-full rounded-2xl overflow-hidden border border-cyan-500/30 bg-slate-900/30 select-none sm:h-[66vh] sm:min-h-[460px]"
       onPointerDown={onPointerDown}
       onContextMenu={(event) => event.preventDefault()}
     >
       <Canvas
         shadows={quality === 'high'}
         dpr={quality === 'high' ? [1, 1.5] : 1}
-        camera={{ position: [8, 8, 14], fov: 52 }}
+        camera={{ position: [8, 8, 14], fov: 50 }}
       >
-        <color attach="background" args={['#031524']} />
-        <fog attach="fog" args={['#031524', ADVENTURE_MAP_BOUNDARY * 0.8, ADVENTURE_MAP_BOUNDARY * 2.8]} />
+        <color attach="background" args={['#041827']} />
+        <fog attach="fog" args={['#041827', ADVENTURE_MAP_BOUNDARY * 0.76, ADVENTURE_MAP_BOUNDARY * 2.45]} />
 
-        <ambientLight intensity={0.35} />
-        <hemisphereLight args={['#34d399', '#020617', 0.42]} />
+        <ambientLight intensity={0.4} />
+        <hemisphereLight args={['#67e8f9', '#020617', 0.48]} />
         <directionalLight
           castShadow={quality === 'high'}
-          intensity={1.05}
-          position={[5, 18, 8]}
+          intensity={1.18}
+          position={[6, 18, 10]}
           shadow-mapSize-width={1024}
           shadow-mapSize-height={1024}
         />
+        <spotLight
+          position={[-12, 20, -6]}
+          angle={0.46}
+          penumbra={0.55}
+          intensity={0.6}
+          color="#22d3ee"
+        />
+        <pointLight position={[0, 5, 0]} intensity={0.3} distance={34} color="#38bdf8" />
 
         <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
           <circleGeometry args={[ADVENTURE_MAP_BOUNDARY, 128]} />
-          <meshStandardMaterial color="#0f766e" roughness={0.92} metalness={0.05} />
+          <meshStandardMaterial color="#0f766e" roughness={0.85} metalness={0.06} />
         </mesh>
 
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.025, 0]}>
@@ -1184,10 +1374,16 @@ export default function AdventureScene({
           <meshBasicMaterial color="#0ea5a8" transparent opacity={0.45} />
         </mesh>
 
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.026, 0]}>
+          <circleGeometry args={[ADVENTURE_MAP_BOUNDARY * 0.72, 128]} />
+          <meshBasicMaterial color="#67e8f9" transparent opacity={0.08} />
+        </mesh>
+
         <EdgeWaterBelt />
 
         <ZoneRings activeZone={zone} />
         <CheckpointBeacon checkpointZone={checkpointZone} />
+        <SeafloorDecor quality={quality} />
         <CoralObstacleMeshes />
         <EnemyGroundProjections enemies={enemies} deadMarks={enemyProjectionMarks} />
         <PlayerAvatar player={player} />
@@ -1209,6 +1405,7 @@ export default function AdventureScene({
           Boss: {bossSkillLabel(bossSignal.activeBossSkill)} ({Math.ceil(bossSignal.telegraphMsLeft / 100) / 10}s)
         </div>
       )}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_12%,rgba(56,189,248,0.15),transparent_45%),radial-gradient(circle_at_80%_14%,rgba(34,211,238,0.12),transparent_44%),linear-gradient(to_bottom,rgba(2,132,199,0.08),rgba(2,6,23,0.34))]" />
       {!gameMode && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-950/30">
           <div className="rounded-xl border border-cyan-400/60 bg-slate-900/80 px-5 py-3 text-sm text-cyan-100 shadow-[0_0_30px_rgba(34,211,238,0.2)]">
