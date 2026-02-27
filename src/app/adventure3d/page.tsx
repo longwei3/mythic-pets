@@ -8,6 +8,7 @@ import AuthStatus from '@/components/AuthStatus';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import RequireAuth from '@/components/RequireAuth';
 import { useAuth } from '@/components/AuthProvider';
+import { getScopedStorageKey } from '@/lib/auth';
 import {
   applyAttack,
   applyGather,
@@ -23,7 +24,6 @@ import {
   startRun,
 } from '@/features/adventure3d/core/runStore';
 import type {
-  AdventureRunRecord,
   AdventureWorldState,
   CameraViewMode,
   EnemyKind,
@@ -31,15 +31,28 @@ import type {
 } from '@/features/adventure3d/core/types';
 import AdventureScene from '@/features/adventure3d/scene/AdventureScene';
 import {
+  type AdventurePresenceEntry,
+  type GlobalAdventureLeaderboardEntry,
+  getAdventurePresenceList,
   getAdventureLeaderboard,
+  getGlobalAdventureLeaderboard,
+  heartbeatAdventurePresence,
   readAdventureProfile,
   recordAdventureRun,
+  syncAdventureBestRun,
   updateAdventureSettings,
 } from '@/features/adventure3d/save/profileSave';
 import { useAdventureInput } from '@/features/adventure3d/systems/inputSystem';
 import { ADVENTURE_MAP_BOUNDARY, DEFAULT_PLAYER_STATE } from '@/features/adventure3d/config/gameBalance';
 import { grantMyth, readMythBalance } from '@/lib/economy';
-import { computeExpProgressFromTotalExp, scaleBaseStatByLevel } from '@/lib/petProgression';
+import { BATTLE_COOLDOWN_MS, formatCooldownTimer } from '@/lib/battleCooldown';
+import { localizePetName } from '@/lib/petNames';
+import {
+  consumeHealthPotion,
+  consumeMagicPotion,
+  readHealthPotionCount,
+  readMagicPotionCount,
+} from '@/lib/magicPotions';
 import {
   playAdventureActionSfx,
   playAdventureCreatureSfx,
@@ -50,6 +63,158 @@ import {
   stopAdventureWaterAmbience,
 } from '@/lib/sounds';
 import type { AdventureProfile } from '@/features/adventure3d/core/types';
+
+const ADVENTURE_COOLDOWN_KEY = 'mythicpets-adventure3d-fail-cooldown';
+const COOLDOWN_TICK_MS = 1000;
+const ONLINE_HEARTBEAT_MS = 20_000;
+const LEADERBOARD_REFRESH_MS = 45_000;
+const ADVENTURE_MAGIC_POTION_RECOVERY = 100;
+const ADVENTURE_HEALTH_POTION_RECOVERY = 100;
+const PET_SYNC_INTERVAL_MS = 1000;
+
+type PetElement = 'gold' | 'wood' | 'water' | 'fire' | 'earth';
+type PetGender = 'male' | 'female';
+
+interface AdventureOwnedPet {
+  id: number;
+  name?: string;
+  nameKey?: string;
+  element: PetElement[];
+  gender: PetGender;
+  level: number;
+  exp: number;
+  maxExp: number;
+  hp: number;
+  maxHp: number;
+  mp: number;
+  maxMp: number;
+  attack: number;
+  defense: number;
+  image: string;
+}
+
+const VALID_ELEMENTS: PetElement[] = ['gold', 'wood', 'water', 'fire', 'earth'];
+
+function normalizeElements(raw: unknown): PetElement[] {
+  const list = Array.isArray(raw) ? raw : [raw];
+  const normalized = list.filter(
+    (value): value is PetElement => typeof value === 'string' && VALID_ELEMENTS.includes(value as PetElement),
+  );
+  return normalized.length > 0 ? normalized : ['water'];
+}
+
+function normalizeOwnedPet(rawPet: any, index: number): AdventureOwnedPet {
+  const level = typeof rawPet?.level === 'number' && rawPet.level > 0 ? Math.floor(rawPet.level) : 1;
+  const maxHp =
+    typeof rawPet?.maxHp === 'number' && rawPet.maxHp > 0
+      ? Math.floor(rawPet.maxHp)
+      : typeof rawPet?.hp === 'number' && rawPet.hp > 0
+        ? Math.floor(rawPet.hp)
+        : 60;
+  const maxMp =
+    typeof rawPet?.maxMp === 'number' && rawPet.maxMp > 0
+      ? Math.floor(rawPet.maxMp)
+      : typeof rawPet?.mp === 'number' && rawPet.mp > 0
+        ? Math.floor(rawPet.mp)
+        : 40;
+  const exp =
+    typeof rawPet?.exp === 'number' && rawPet.exp >= 0
+      ? Math.floor(rawPet.exp)
+      : 0;
+  const maxExp =
+    typeof rawPet?.maxExp === 'number' && rawPet.maxExp > 0
+      ? Math.floor(rawPet.maxExp)
+      : Math.max(100, level * 100);
+
+  return {
+    id: typeof rawPet?.id === 'number' && Number.isFinite(rawPet.id) ? rawPet.id : index + 1,
+    name: typeof rawPet?.name === 'string' ? rawPet.name : undefined,
+    nameKey: typeof rawPet?.nameKey === 'string' ? rawPet.nameKey : undefined,
+    element: normalizeElements(rawPet?.element),
+    gender: rawPet?.gender === 'female' ? 'female' : 'male',
+    level,
+    exp: Math.min(exp, maxExp),
+    maxExp,
+    hp:
+      typeof rawPet?.hp === 'number' && rawPet.hp >= 0
+        ? Math.min(Math.floor(rawPet.hp), maxHp)
+        : maxHp,
+    maxHp,
+    mp:
+      typeof rawPet?.mp === 'number' && rawPet.mp >= 0
+        ? Math.min(Math.floor(rawPet.mp), maxMp)
+        : maxMp,
+    maxMp,
+    attack: typeof rawPet?.attack === 'number' && rawPet.attack > 0 ? Math.floor(rawPet.attack) : 20,
+    defense: typeof rawPet?.defense === 'number' && rawPet.defense > 0 ? Math.floor(rawPet.defense) : 10,
+    image: typeof rawPet?.image === 'string' ? rawPet.image : '🦞',
+  };
+}
+
+function readAdventureOwnedPets(profileKey?: string): AdventureOwnedPet[] {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  const raw = localStorage.getItem(getScopedStorageKey('myPets', profileKey));
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.map((pet, index) => normalizeOwnedPet(pet, index));
+  } catch {
+    return [];
+  }
+}
+
+function writeAdventureOwnedPets(pets: AdventureOwnedPet[], profileKey?: string): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  localStorage.setItem(getScopedStorageKey('myPets', profileKey), JSON.stringify(pets));
+}
+
+function getAdventureCooldownKey(profileKey?: string): string {
+  return getScopedStorageKey(ADVENTURE_COOLDOWN_KEY, profileKey);
+}
+
+function readAdventureCooldownUntil(profileKey?: string): number {
+  if (typeof window === 'undefined') {
+    return 0;
+  }
+
+  const raw = localStorage.getItem(getAdventureCooldownKey(profileKey));
+  if (!raw) {
+    return 0;
+  }
+
+  const until = Number.parseInt(raw, 10);
+  if (Number.isNaN(until) || until <= Date.now()) {
+    localStorage.removeItem(getAdventureCooldownKey(profileKey));
+    return 0;
+  }
+
+  return until;
+}
+
+function writeAdventureCooldownUntil(until: number, profileKey?: string): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  localStorage.setItem(getAdventureCooldownKey(profileKey), String(until));
+}
+
+function clearAdventureCooldown(profileKey?: string): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  localStorage.removeItem(getAdventureCooldownKey(profileKey));
+}
 
 function formatDurationMs(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -148,26 +313,50 @@ export default function Adventure3DPage() {
   const [rewardClaimed, setRewardClaimed] = useState(false);
   const [isGameMode, setIsGameMode] = useState(false);
   const [viewMode, setViewMode] = useState<CameraViewMode>('tps');
+  const [globalLeaderboard, setGlobalLeaderboard] = useState<GlobalAdventureLeaderboardEntry[]>([]);
+  const [onlinePlayers, setOnlinePlayers] = useState<AdventurePresenceEntry[]>([]);
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [cooldownNow, setCooldownNow] = useState(Date.now());
+  const [magicPotionCount, setMagicPotionCount] = useState(0);
+  const [healthPotionCount, setHealthPotionCount] = useState(0);
+  const [potionNotice, setPotionNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [ownedPets, setOwnedPets] = useState<AdventureOwnedPet[]>([]);
+  const [selectedPetId, setSelectedPetId] = useState<number | null>(null);
 
   const input = useAdventureInput(world.run.phase === 'running' && isAuthenticated && isGameMode);
   const lastTickRef = useRef<number>(0);
   const cameraYawRef = useRef(0.78);
   const enemyPulseRef = useRef<Map<string, { attack: number; hit: number; kind: EnemyKind }>>(new Map());
   const edgeWaveSfxNextAtRef = useRef(0);
+  const lastFailureAtRef = useRef<number | null>(null);
+  const lastPetSyncAtRef = useRef(0);
 
   const quality = profile?.settings.quality ?? 'high';
   const musicEnabled = profile?.settings.musicEnabled ?? true;
   const sfxEnabled = profile?.settings.sfxEnabled ?? true;
   const audioEnabled = musicEnabled && sfxEnabled;
+  const selectedPet = useMemo(
+    () => ownedPets.find((pet) => pet.id === selectedPetId) ?? null,
+    [ownedPets, selectedPetId],
+  );
+  const cooldownRemainingMs = Math.max(0, cooldownUntil - cooldownNow);
+  const isInCooldown = cooldownRemainingMs > 0;
 
   useEffect(() => {
     if (!username) {
       setProfile(null);
       setMythBalance(0);
+      setMagicPotionCount(0);
+      setHealthPotionCount(0);
+      setOwnedPets([]);
+      setSelectedPetId(null);
       setSummary(null);
       setRewardClaimed(false);
       setIsGameMode(false);
       setViewMode('tps');
+      setGlobalLeaderboard([]);
+      setOnlinePlayers([]);
+      setCooldownUntil(0);
       cameraYawRef.current = 0.78;
       setWorld(createInitialWorldState());
       return;
@@ -175,11 +364,21 @@ export default function Adventure3DPage() {
 
     setProfile(readAdventureProfile(username));
     setMythBalance(readMythBalance(username));
+    setMagicPotionCount(readMagicPotionCount(username));
+    setHealthPotionCount(readHealthPotionCount(username));
+    const nextPets = readAdventureOwnedPets(username);
+    setOwnedPets(nextPets);
+    setSelectedPetId(nextPets[0]?.id ?? null);
     setWorld(createInitialWorldState());
     setSummary(null);
     setRewardClaimed(false);
     setIsGameMode(false);
     setViewMode('tps');
+    setGlobalLeaderboard([]);
+    setOnlinePlayers([]);
+    setCooldownUntil(readAdventureCooldownUntil(username));
+    setCooldownNow(Date.now());
+    lastFailureAtRef.current = null;
     cameraYawRef.current = 0.78;
   }, [username]);
 
@@ -302,6 +501,15 @@ export default function Adventure3DPage() {
   }, [input.viewToggleNonce]);
 
   useEffect(() => {
+    if (!potionNotice) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => setPotionNotice(null), 2500);
+    return () => window.clearTimeout(timer);
+  }, [potionNotice]);
+
+  useEffect(() => {
     const previous = enemyPulseRef.current;
     const next = new Map<string, { attack: number; hit: number; kind: EnemyKind }>();
 
@@ -354,6 +562,43 @@ export default function Adventure3DPage() {
   ]);
 
   useEffect(() => {
+    if (!isInCooldown) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setCooldownNow(Date.now());
+    }, COOLDOWN_TICK_MS);
+
+    return () => window.clearInterval(timer);
+  }, [isInCooldown]);
+
+  useEffect(() => {
+    if (!username || !cooldownUntil || isInCooldown) {
+      return;
+    }
+    clearAdventureCooldown(username);
+    setCooldownUntil(0);
+  }, [cooldownUntil, isInCooldown, username]);
+
+  useEffect(() => {
+    if (world.run.phase !== 'failed' || !username) {
+      return;
+    }
+
+    const failureAt = world.run.endedAt ?? Date.now();
+    if (lastFailureAtRef.current === failureAt) {
+      return;
+    }
+    lastFailureAtRef.current = failureAt;
+
+    const until = Date.now() + BATTLE_COOLDOWN_MS;
+    setCooldownUntil(until);
+    setCooldownNow(Date.now());
+    writeAdventureCooldownUntil(until, username);
+  }, [world.run.phase, world.run.endedAt, username]);
+
+  useEffect(() => {
     if (world.run.phase !== 'failed' && world.run.phase !== 'completed') {
       setSummary(null);
       setRewardClaimed(false);
@@ -365,71 +610,218 @@ export default function Adventure3DPage() {
 
   const playerHpRatio = useMemo(() => Math.max(0, world.player.hp / world.player.maxHp), [world.player.hp, world.player.maxHp]);
   const playerEnergyRatio = useMemo(() => Math.max(0, world.player.energy / world.player.maxEnergy), [world.player.energy, world.player.maxEnergy]);
-  const adventureExpTotal = useMemo(
-    () =>
-      world.run.kills * 28 +
-      world.loot.shell * 6 +
-      world.loot.essence * 10 +
-      world.loot.relic * 18 +
-      world.loot.myth * 4 +
-      Math.round(world.run.score * 0.2),
-    [world.run.kills, world.loot.shell, world.loot.essence, world.loot.relic, world.loot.myth, world.run.score],
-  );
-  const expProgress = useMemo(() => computeExpProgressFromTotalExp(adventureExpTotal), [adventureExpTotal]);
-  const expRatio = useMemo(() => Math.max(0, Math.min(1, expProgress.current / expProgress.next)), [expProgress.current, expProgress.next]);
-  const scaledMaxHp = useMemo(
-    () => scaleBaseStatByLevel(DEFAULT_PLAYER_STATE.maxHp, expProgress.level),
-    [expProgress.level],
-  );
-  const scaledMaxEnergy = useMemo(
-    () => scaleBaseStatByLevel(DEFAULT_PLAYER_STATE.maxEnergy, expProgress.level),
-    [expProgress.level],
-  );
+  const expCurrent = selectedPet?.exp ?? 0;
+  const expNext = selectedPet?.maxExp ?? 100;
+  const expRatio = useMemo(() => Math.max(0, Math.min(1, expCurrent / Math.max(1, expNext))), [expCurrent, expNext]);
+
+  const refreshGlobalLeaderboard = useCallback(async () => {
+    const list = await getGlobalAdventureLeaderboard(12);
+    setGlobalLeaderboard(list);
+  }, []);
 
   useEffect(() => {
-    setWorld((prev) => {
-      const hpNeedsSync = prev.player.maxHp !== scaledMaxHp;
-      const energyNeedsSync = prev.player.maxEnergy !== scaledMaxEnergy;
-      const levelNeedsSync = prev.player.level !== expProgress.level;
+    if (!username) {
+      setGlobalLeaderboard([]);
+      return;
+    }
 
-      if (!hpNeedsSync && !energyNeedsSync && !levelNeedsSync) {
-        return prev;
+    void refreshGlobalLeaderboard();
+    const timer = window.setInterval(() => {
+      void refreshGlobalLeaderboard();
+    }, LEADERBOARD_REFRESH_MS);
+
+    return () => window.clearInterval(timer);
+  }, [username, refreshGlobalLeaderboard]);
+
+  useEffect(() => {
+    if (!username) {
+      setOnlinePlayers([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const runPresenceHeartbeat = async () => {
+      await heartbeatAdventurePresence(username, {
+        zone: world.run.zone,
+        phase: world.run.phase,
+        level: selectedPet?.level ?? world.player.level,
+        mythBalance,
+      });
+
+      const presenceList = await getAdventurePresenceList(18);
+      if (!cancelled) {
+        setOnlinePlayers(presenceList);
       }
+    };
 
-      const hpRatio = prev.player.maxHp > 0 ? prev.player.hp / prev.player.maxHp : 1;
-      const energyRatio = prev.player.maxEnergy > 0 ? prev.player.energy / prev.player.maxEnergy : 1;
-      const syncedHp = Math.max(1, Math.min(scaledMaxHp, Math.round(scaledMaxHp * hpRatio)));
-      const syncedEnergy = Math.max(0, Math.min(scaledMaxEnergy, Math.round(scaledMaxEnergy * energyRatio)));
+    void runPresenceHeartbeat();
+    const timer = window.setInterval(() => {
+      void runPresenceHeartbeat();
+    }, ONLINE_HEARTBEAT_MS);
 
-      return {
-        ...prev,
-        player: {
-          ...prev.player,
-          level: expProgress.level,
-          maxHp: scaledMaxHp,
-          hp: syncedHp,
-          maxEnergy: scaledMaxEnergy,
-          energy: syncedEnergy,
-        },
-      };
-    });
-  }, [expProgress.level, scaledMaxEnergy, scaledMaxHp]);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [mythBalance, selectedPet?.level, username, world.player.level, world.run.phase, world.run.zone]);
 
-  const leaderboard: AdventureRunRecord[] = useMemo(() => {
+  const localLeaderboard = useMemo<GlobalAdventureLeaderboardEntry[]>(() => {
     if (!profile) {
       return [];
     }
-    return getAdventureLeaderboard(profile, 6);
-  }, [profile]);
+
+    return getAdventureLeaderboard(profile, 6).map((record) => ({
+      ...record,
+      username: username || '-',
+    }));
+  }, [profile, username]);
+
+  const leaderboard = useMemo<GlobalAdventureLeaderboardEntry[]>(
+    () => (globalLeaderboard.length > 0 ? globalLeaderboard : localLeaderboard),
+    [globalLeaderboard, localLeaderboard],
+  );
+
+  const applySelectedPetToWorld = useCallback(
+    (baseState: AdventureWorldState): AdventureWorldState => {
+      if (!selectedPet) {
+        return baseState;
+      }
+
+      return {
+        ...baseState,
+        player: {
+          ...baseState.player,
+          level: selectedPet.level,
+          hp: Math.min(selectedPet.hp, selectedPet.maxHp),
+          maxHp: selectedPet.maxHp,
+          energy: Math.min(selectedPet.mp, selectedPet.maxMp),
+          maxEnergy: selectedPet.maxMp,
+          attack: selectedPet.attack,
+          defense: selectedPet.defense,
+        },
+      };
+    },
+    [selectedPet],
+  );
+
+  useEffect(() => {
+    if (!selectedPet) {
+      return;
+    }
+
+    setWorld((prev) => {
+      if (prev.run.phase !== 'idle') {
+        return prev;
+      }
+      return applySelectedPetToWorld(prev);
+    });
+  }, [applySelectedPetToWorld, selectedPet]);
+
+  useEffect(() => {
+    if (!username || !selectedPetId || world.run.phase === 'idle') {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastPetSyncAtRef.current < PET_SYNC_INTERVAL_MS) {
+      return;
+    }
+    lastPetSyncAtRef.current = now;
+
+    setOwnedPets((prev) => {
+      const idx = prev.findIndex((pet) => pet.id === selectedPetId);
+      if (idx < 0) {
+        return prev;
+      }
+
+      const current = prev[idx];
+      const nextHp = Math.max(0, Math.min(current.maxHp, Math.round(world.player.hp)));
+      const nextMp = Math.max(0, Math.min(current.maxMp, Math.round(world.player.energy)));
+      const nextLevel = Math.max(1, Math.round(world.player.level));
+      const nextAttack = Math.max(1, Math.round(world.player.attack));
+      const nextDefense = Math.max(1, Math.round(world.player.defense));
+      const nextMaxHp = Math.max(1, Math.round(world.player.maxHp));
+      const nextMaxMp = Math.max(1, Math.round(world.player.maxEnergy));
+
+      const unchanged =
+        current.hp === nextHp &&
+        current.mp === nextMp &&
+        current.level === nextLevel &&
+        current.attack === nextAttack &&
+        current.defense === nextDefense &&
+        current.maxHp === nextMaxHp &&
+        current.maxMp === nextMaxMp;
+
+      if (unchanged) {
+        return prev;
+      }
+
+      const updatedPet: AdventureOwnedPet = {
+        ...current,
+        hp: nextHp,
+        mp: nextMp,
+        level: nextLevel,
+        attack: nextAttack,
+        defense: nextDefense,
+        maxHp: nextMaxHp,
+        maxMp: nextMaxMp,
+      };
+
+      const nextPets = [...prev];
+      nextPets[idx] = updatedPet;
+      writeAdventureOwnedPets(nextPets, username);
+      return nextPets;
+    });
+  }, [
+    selectedPetId,
+    username,
+    world.player.attack,
+    world.player.defense,
+    world.player.energy,
+    world.player.hp,
+    world.player.level,
+    world.player.maxEnergy,
+    world.player.maxHp,
+    world.run.phase,
+  ]);
 
   const handleRunStart = () => {
+    if (!selectedPet) {
+      setWorld((prev) => ({
+        ...prev,
+        message: t('adventure3d.selectPetFirst'),
+      }));
+      return;
+    }
+    if (isInCooldown) {
+      setWorld((prev) => ({
+        ...prev,
+        message: t('adventure3d.cooldownLocked', { time: formatCooldownTimer(cooldownRemainingMs) }),
+      }));
+      return;
+    }
     setSummary(null);
     setRewardClaimed(false);
     setIsGameMode(true);
-    setWorld(startRun(Date.now()));
+    setWorld(applySelectedPetToWorld(startRun(Date.now())));
   };
 
   const handleEngageGameMode = () => {
+    if (!selectedPet) {
+      setWorld((prev) => ({
+        ...prev,
+        message: t('adventure3d.selectPetFirst'),
+      }));
+      return;
+    }
+    if (isInCooldown) {
+      setWorld((prev) => ({
+        ...prev,
+        message: t('adventure3d.cooldownLocked', { time: formatCooldownTimer(cooldownRemainingMs) }),
+      }));
+      return;
+    }
     setIsGameMode(true);
     setSummary(null);
     setRewardClaimed(false);
@@ -440,7 +832,7 @@ export default function Adventure3DPage() {
       if (prev.run.phase === 'paused') {
         return resumeRun(prev);
       }
-      return startRun(Date.now());
+      return applySelectedPetToWorld(startRun(Date.now()));
     });
   };
 
@@ -479,13 +871,77 @@ export default function Adventure3DPage() {
     const rewardResult = grantMyth(summary.mythReward, 'system', username);
     setMythBalance(rewardResult.balance);
 
-    const nextProfile = recordAdventureRun(summary, username);
+    const playedAt = Date.now();
+    const nextProfile = recordAdventureRun(summary, username, playedAt);
     setProfile(nextProfile);
+    void syncAdventureBestRun(summary, username, playedAt).then(() => refreshGlobalLeaderboard());
 
     setRewardClaimed(true);
     if (sfxEnabled) {
       playAdventureActionSfx(summary.completed ? 'victory' : 'defeat');
     }
+  };
+
+  const handleUseMagicPotion = () => {
+    if (!username) {
+      return;
+    }
+    if (magicPotionCount <= 0) {
+      setPotionNotice({ type: 'error', text: t('adventure3d.noMagicPotion') });
+      return;
+    }
+    if (world.player.energy >= world.player.maxEnergy) {
+      setPotionNotice({ type: 'error', text: t('adventure3d.magicFull') });
+      return;
+    }
+
+    const left = consumeMagicPotion(1, username);
+    setMagicPotionCount(left);
+    setWorld((prev) => ({
+      ...prev,
+      player: {
+        ...prev.player,
+        energy: Math.min(prev.player.maxEnergy, prev.player.energy + ADVENTURE_MAGIC_POTION_RECOVERY),
+      },
+    }));
+    setPotionNotice({
+      type: 'success',
+      text: t('adventure3d.useMagicPotionSuccess', {
+        recover: ADVENTURE_MAGIC_POTION_RECOVERY,
+        left,
+      }),
+    });
+  };
+
+  const handleUseHealthPotion = () => {
+    if (!username) {
+      return;
+    }
+    if (healthPotionCount <= 0) {
+      setPotionNotice({ type: 'error', text: t('adventure3d.noHealthPotion') });
+      return;
+    }
+    if (world.player.hp >= world.player.maxHp) {
+      setPotionNotice({ type: 'error', text: t('adventure3d.healthFull') });
+      return;
+    }
+
+    const left = consumeHealthPotion(1, username);
+    setHealthPotionCount(left);
+    setWorld((prev) => ({
+      ...prev,
+      player: {
+        ...prev.player,
+        hp: Math.min(prev.player.maxHp, prev.player.hp + ADVENTURE_HEALTH_POTION_RECOVERY),
+      },
+    }));
+    setPotionNotice({
+      type: 'success',
+      text: t('adventure3d.useHealthPotionSuccess', {
+        recover: ADVENTURE_HEALTH_POTION_RECOVERY,
+        left,
+      }),
+    });
   };
 
   const handleQualityToggle = () => {
@@ -566,7 +1022,8 @@ export default function Adventure3DPage() {
                 <div className="mb-2 flex items-center justify-between text-xs">
                   <span className="text-slate-400">{t('adventure3d.roleName')}</span>
                   <span className="font-semibold text-cyan-100">
-                    {username ?? '-'} · Lv.{expProgress.level}
+                    {selectedPet ? localizePetName(selectedPet.name || selectedPet.nameKey, t) : username ?? '-'} · Lv.
+                    {world.player.level}
                   </span>
                 </div>
 
@@ -603,7 +1060,7 @@ export default function Adventure3DPage() {
                   <div className="mb-1 flex items-center justify-between text-[11px]">
                     <span className="text-slate-300">{t('adventure3d.exp')}</span>
                     <span className="text-slate-400">
-                      {expProgress.current}/{expProgress.next}
+                      {expCurrent}/{expNext}
                     </span>
                   </div>
                   <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
@@ -615,16 +1072,70 @@ export default function Adventure3DPage() {
             <div className="pointer-events-none absolute right-3 top-3 z-20 w-36 sm:w-40 md:w-44">
               <AdventureMiniMap world={world} />
             </div>
+            <div className="absolute left-3 bottom-3 z-20 w-60 sm:w-64">
+              <div className="rounded-lg border border-slate-700 bg-slate-900/88 p-2.5 shadow-[0_0_18px_rgba(15,23,42,0.45)]">
+                <p className="mb-2 text-[11px] text-slate-300">{t('adventure3d.potionBarTitle')}</p>
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={handleUseMagicPotion}
+                    disabled={magicPotionCount <= 0 || world.player.energy >= world.player.maxEnergy}
+                    className="flex w-full items-center justify-between rounded-md bg-cyan-600/90 px-2 py-1.5 text-xs font-semibold text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span>🧪 {t('adventure3d.magicPotionLabel', { count: magicPotionCount })}</span>
+                    <span>+{ADVENTURE_MAGIC_POTION_RECOVERY}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleUseHealthPotion}
+                    disabled={healthPotionCount <= 0 || world.player.hp >= world.player.maxHp}
+                    className="flex w-full items-center justify-between rounded-md bg-rose-600/90 px-2 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span>❤️ {t('adventure3d.healthPotionLabel', { count: healthPotionCount })}</span>
+                    <span>+{ADVENTURE_HEALTH_POTION_RECOVERY}</span>
+                  </button>
+                </div>
+                {potionNotice && (
+                  <p
+                    className={`mt-2 text-[11px] ${
+                      potionNotice.type === 'success' ? 'text-emerald-300' : 'text-rose-300'
+                    }`}
+                  >
+                    {potionNotice.text}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
           <aside className="rounded-2xl border border-cyan-500/30 bg-slate-900/70 p-4 space-y-4">
-            <div>
-              <p className="text-xs text-cyan-300">
-                {isGameMode ? t('adventure3d.gameModeOn') : t('adventure3d.gameModeOff')}
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                {viewMode === 'tps' ? t('adventure3d.viewThird') : t('adventure3d.viewFirst')}
-              </p>
+            <div className="rounded-lg border border-slate-700 bg-slate-800/65 p-3">
+              <p className="mb-2 text-sm text-cyan-200">{t('adventure3d.petSelectorTitle')}</p>
+              {ownedPets.length === 0 ? (
+                <p className="text-xs text-slate-400">{t('adventure3d.petSelectorEmpty')}</p>
+              ) : (
+                <div className="space-y-2">
+                  <select
+                    value={selectedPetId ?? ''}
+                    onChange={(event) => {
+                      const value = Number.parseInt(event.target.value, 10);
+                      setSelectedPetId(Number.isNaN(value) ? null : value);
+                    }}
+                    className="w-full rounded-md border border-slate-600 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-cyan-500"
+                  >
+                    {ownedPets.map((pet) => (
+                      <option key={`adventure-pet-${pet.id}`} value={pet.id}>
+                        {localizePetName(pet.name || pet.nameKey, t)} · Lv.{pet.level}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedPet && (
+                    <p className="text-xs text-slate-400">
+                      HP {selectedPet.hp}/{selectedPet.maxHp} · MP {selectedPet.mp}/{selectedPet.maxMp}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-2 text-sm">
@@ -646,18 +1157,46 @@ export default function Adventure3DPage() {
               </div>
             </div>
 
-            <div className="rounded-lg border border-slate-700 p-3 text-sm">
-              <p className="text-slate-300 mb-1">{t('adventure3d.loot')}</p>
-              <p className="text-slate-400">MYTH +{world.loot.myth}</p>
-              <p className="text-slate-400">Shell x{world.loot.shell}</p>
-              <p className="text-slate-400">Essence x{world.loot.essence}</p>
-              <p className="text-slate-400">Relic x{world.loot.relic}</p>
+            {isInCooldown && (
+              <p className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+                {t('adventure3d.cooldownLocked', { time: formatCooldownTimer(cooldownRemainingMs) })}
+              </p>
+            )}
+
+            <div className="rounded-lg border border-slate-700 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm text-cyan-200">{t('adventure3d.gatherAreaTitle')}</p>
+                <span className="text-xs text-slate-400">{onlinePlayers.length}</span>
+              </div>
+              {onlinePlayers.length === 0 ? (
+                <p className="text-xs text-slate-500">{t('adventure3d.gatherAreaEmpty')}</p>
+              ) : (
+                <div className="max-h-36 space-y-1 overflow-y-auto pr-1">
+                  {onlinePlayers.map((player) => (
+                    <div
+                      key={`online-${player.username}`}
+                      className={`flex items-center justify-between rounded px-2 py-1 text-xs ${
+                        player.username === username ? 'bg-cyan-500/15 text-cyan-100' : 'bg-slate-800/70 text-slate-300'
+                      }`}
+                    >
+                      <span className="truncate pr-2">
+                        {player.username}
+                        {player.username === username ? ` ${t('adventure3d.you')}` : ''}
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        Z{player.zone} · Lv.{player.level}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={handleRunStart}
-                className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm font-semibold"
+                disabled={isInCooldown || !selectedPet}
+                className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
               >
                 {t('adventure3d.start')}
               </button>
@@ -696,7 +1235,7 @@ export default function Adventure3DPage() {
                   setSummary(null);
                   setRewardClaimed(false);
                   setIsGameMode(false);
-                  setWorld(resetRun());
+                  setWorld(applySelectedPetToWorld(resetRun()));
                 }}
                 className="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-semibold"
               >
@@ -724,11 +1263,6 @@ export default function Adventure3DPage() {
           </aside>
         </section>
 
-        <section className="rounded-xl border border-slate-700/70 bg-slate-900/55 px-4 py-3 text-sm text-slate-300">
-          <p>{t('adventure3d.controls')}</p>
-          <p className="text-xs text-slate-400 mt-1">{t('adventure3d.controlsHint')}</p>
-        </section>
-
         <section className="rounded-xl border border-slate-700/70 bg-slate-900/55 px-4 py-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-cyan-200">{t('adventure3d.leaderboardTitle')}</h2>
@@ -739,14 +1273,18 @@ export default function Adventure3DPage() {
           ) : (
             <div className="space-y-2">
               {leaderboard.map((record, index) => (
-                <div key={record.id} className="grid grid-cols-[28px,1fr,80px,90px,95px] items-center gap-2 rounded-lg bg-slate-900/70 px-3 py-2 text-xs">
+                <div
+                  key={`${record.username}-${record.id}`}
+                  className="grid grid-cols-[28px,88px,1fr,70px,70px] sm:grid-cols-[28px,110px,1fr,80px,90px,95px] items-center gap-2 rounded-lg bg-slate-900/70 px-3 py-2 text-xs"
+                >
                   <span className="font-semibold text-amber-300">#{index + 1}</span>
+                  <span className="truncate text-cyan-200">{record.username}</span>
                   <span className="text-slate-300">
                     {t('adventure3d.zone')} {record.zone} · {t('adventure3d.kills')} {record.kills}
                   </span>
                   <span className="text-slate-200">{formatDurationMs(record.durationMs)}</span>
                   <span className="font-semibold text-cyan-200">{record.score}</span>
-                  <span className="text-slate-400">{formatShortDate(record.playedAt)}</span>
+                  <span className="hidden sm:block text-slate-400">{formatShortDate(record.playedAt)}</span>
                 </div>
               ))}
             </div>
@@ -792,7 +1330,8 @@ export default function Adventure3DPage() {
               <button
                 type="button"
                 onClick={handleRunStart}
-                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold"
+                disabled={isInCooldown || !selectedPet}
+                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
               >
                 {t('adventure3d.restart')}
               </button>

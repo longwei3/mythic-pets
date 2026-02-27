@@ -65,14 +65,11 @@ export function stepPlayerMovement(
     }
   }
 
-  const energyDelta = input.sprint && isMoving ? -18 * deltaSec : 13 * deltaSec;
-  const nextEnergy = Math.max(0, Math.min(player.maxEnergy, player.energy + energyDelta));
   const nextHeading = isMoving ? Math.atan2(worldDirection.x, worldDirection.z) : player.heading;
 
   return {
     ...player,
     position: nextPosition,
     heading: nextHeading,
-    energy: nextEnergy,
   };
 }

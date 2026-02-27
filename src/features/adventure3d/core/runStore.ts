@@ -32,6 +32,8 @@ import { mergeLoot, rollLootForEnemy } from '@/features/adventure3d/systems/loot
 import { stepPlayerMovement } from '@/features/adventure3d/systems/movementSystem';
 
 const ENEMY_PROJECTION_MARK_TTL_MS = 4600;
+const SPRINT_ENERGY_COST_PER_SEC = 18;
+const OUT_OF_COMBAT_RECOVERY_PER_MIN = 10;
 
 function distance(a: Vec2, b: Vec2): number {
   return Math.hypot(a.x - b.x, a.z - b.z);
@@ -63,6 +65,29 @@ function getEnemyHitRadius(enemy: EnemyState): number {
     return 0.68;
   }
   return 0.6;
+}
+
+function hasMovementInput(input: MovementInput): boolean {
+  return input.forward || input.backward || input.left || input.right;
+}
+
+function isEnemyInCombatState(enemy: EnemyState): boolean {
+  return enemy.state === 'alert' || enemy.state === 'chase' || enemy.state === 'attack';
+}
+
+function isPlayerInCombat(enemies: EnemyState[], playerPosition: Vec2): boolean {
+  return enemies.some((enemy) => {
+    if (!isEnemyAlive(enemy)) {
+      return false;
+    }
+
+    if (isEnemyInCombatState(enemy)) {
+      return true;
+    }
+
+    const safeAggroRadius = Math.max(enemy.aggroRange + 1.5, enemy.attackRange + 1.5);
+    return distance(enemy.position, playerPosition) <= safeAggroRadius;
+  });
 }
 
 function createProjectileFromEnemySpawn(spawn: EnemyProjectileSpawn): ProjectileState {
@@ -645,15 +670,21 @@ export function applyTick(state: AdventureWorldState, args: TickArgs): Adventure
     verticalVelocity: nextVerticalVelocity,
     isGrounded: nextGrounded,
   };
+  const isSprinting = movementInput.sprint && hasMovementInput(movementInput);
+  const sprintEnergyCost = isSprinting ? SPRINT_ENERGY_COST_PER_SEC * args.deltaSec : 0;
+  const movedPlayerWithResources = {
+    ...movedPlayerWithJump,
+    energy: Math.max(0, movedPlayerWithJump.energy - sprintEnergyCost),
+  };
 
-  const aiResult = updateEnemyAi(state.enemies, movedPlayerWithJump.position, args.deltaSec);
+  const aiResult = updateEnemyAi(state.enemies, movedPlayerWithResources.position, args.deltaSec);
   const projectilesForStep = [
     ...state.projectiles,
     ...aiResult.spawnedProjectiles.map(createProjectileFromEnemySpawn),
   ];
   const projectileStep = stepProjectiles(
     aiResult.enemies,
-    movedPlayerWithJump,
+    movedPlayerWithResources,
     projectilesForStep,
     args.deltaSec,
   );
@@ -685,7 +716,7 @@ export function applyTick(state: AdventureWorldState, args: TickArgs): Adventure
   const withDamage = applyPlayerDamage(
     {
       ...state,
-      player: movedPlayerWithJump,
+      player: movedPlayerWithResources,
       enemies: projectileStep.enemies,
       projectiles: projectileStep.projectiles,
       enemyProjectionMarks: nextProjectionMarks,
@@ -699,11 +730,25 @@ export function applyTick(state: AdventureWorldState, args: TickArgs): Adventure
     args.now,
   );
 
+  const canRecover = withDamage.run.phase === 'running' && !isPlayerInCombat(withDamage.enemies, withDamage.player.position);
+  const passiveRecoverPerSec = OUT_OF_COMBAT_RECOVERY_PER_MIN / 60;
+  const recoveredPlayer = canRecover
+    ? {
+        ...withDamage.player,
+        hp: Math.min(withDamage.player.maxHp, withDamage.player.hp + passiveRecoverPerSec * args.deltaSec),
+        energy: Math.min(
+          withDamage.player.maxEnergy,
+          withDamage.player.energy + passiveRecoverPerSec * args.deltaSec,
+        ),
+      }
+    : withDamage.player;
+
   const targetEnemyId = ensureTargetEnemyId(withDamage);
   const aliveEnemies = withDamage.enemies.filter(isEnemyAlive);
 
   let nextState: AdventureWorldState = {
     ...withDamage,
+    player: recoveredPlayer,
     enemies: aliveEnemies,
     targetEnemyId,
   };
